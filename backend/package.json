@@ -13,6 +13,7 @@
     "prisma:validate": "tsx src/scripts/validatePrisma.ts",
     "test:db": "tsx src/scripts/testDbConnection.ts",
     "test:auth": "tsx src/scripts/testAuth.ts",
+    "test:rbac": "tsx src/scripts/testRbac.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

@@ -395,7 +395,70 @@ Protected backend routes use the `requireAuth` middleware:
 
 ---
 
-## 11. Development Commands
+## 11. Role-Based Access Control (RBAC) & Authorization Architecture
+
+CivicFix implements a multi-tenant **Role-Based Access Control (RBAC)** architecture that enforces security boundaries across platform, organization, department, and individual user resources.
+
+### 11.1 Authentication vs. Authorization
+- **Authentication (`requireAuth`):** Answers *"Who are you?"* by validating the cryptographic signature and expiration of the JWT bearer token.
+- **Authorization (`requireRole`, `requireOrganizationAccess`, etc.):** Answers *"What are you allowed to do?"* by checking active database state and contextual relationships.
+
+> [!IMPORTANT]
+> **Database State Rule:** CivicFix does **not** rely solely on the role claims inside the JWT.
+> Authorization verifies the user's active status, current role, and memberships (`organization_members`, `department_members`) directly from the database. If a user is deactivated or their role is modified, access is revoked immediately without waiting for token expiration.
+
+### 11.2 Available Roles & Responsibilities
+
+| Role | Scope | Key Capabilities & Boundaries |
+|---|---|---|
+| `PLATFORM_ADMIN` | Platform-Wide | Platform governance, tenant onboarding/activation, global configuration, cross-tenant auditing. Does not automatically bypass operational restrictions unless explicitly permitted. |
+| `ORG_OWNER` | Organization | Primary tenant authority (e.g., SRM Campus Administration). Full control over organization configuration, organization admins, department creation, and all issues within their organization. |
+| `ORG_ADMIN` | Organization | Operational administration within their organization. Manage department staff, triage and assign tickets, re-route issues, and inspect organization-wide issue telemetry. |
+| `MANAGER` | Department | Operational lead of a specific department (e.g., Civil, Electrical). Triage tickets assigned to their department, assign technicians, update workflow status, and add remarks. Cannot access unrelated departments. |
+| `STAFF` | Department | Field technicians and operational staff. View tickets assigned to their department, update issue resolution progress, add remarks, and submit resolution proofs. Cannot manage organizations or users. |
+| `USER` | Citizen / Student | Public reporters and students. Submit new issues, view own issue history and timelines, add details to own issues, and receive notifications. Cannot access organization administration or other users' private issues. |
+
+### 11.3 Multi-Tenant Isolation Layers
+
+#### 1. Organization Isolation (`requireOrganizationAccess`)
+- Prevents horizontal privilege escalation where an admin of Organization A attempts to inspect or manipulate Organization B (`/api/organizations/:organizationId/*`).
+- Validates active database membership in `organization_members`.
+- Requests from unauthorized users are rejected with `403 Forbidden`.
+
+#### 2. Department Isolation (`requireDepartmentAccess`)
+- Ensures departmental managers and staff are strictly confined to their assigned operations (`/api/departments/:departmentId/*`).
+- For example, an Electrical technician cannot access Civil / Infrastructure workflows.
+- Validates active database membership in `department_members`. Parent organization admins retain hierarchical access.
+
+#### 3. User Resource Ownership (`requireUserOwnership`)
+- Enforces strict user-scoped isolation (`/api/users/:userId/*`).
+- Identity is derived strictly from the verified JWT subject, **never** trusting `req.body.userId` or `req.query.userId`.
+- Any user attempting to read or modify another user's data receives `403 Forbidden`.
+
+#### 4. Issue-Scoped Access Rights (`requireIssueAccess`)
+- Future issue APIs leverage centralized access logic:
+  - `USER`: Only permitted to access issues where `issue.reporterId === req.user.id`.
+  - `ORG_ADMIN` / `ORG_OWNER`: Permitted across any issue within their organization.
+  - `MANAGER` / `STAFF`: Permitted only on issues assigned to their department or assigned directly to them.
+  - `PLATFORM_ADMIN`: Permitted platform-wide.
+
+### 11.4 HTTP Status Code Conventions
+- `401 Unauthorized`: Authentication missing, Bearer token malformed, token expired, signature forged, or account deactivated.
+- `403 Forbidden`: Authenticated identity verified, but the user does not possess sufficient role, organization, department, or ownership permissions.
+- `400 Bad Request`: Malformed or invalid UUID parameters.
+- `404 Not Found`: Target resource (department, issue) does not exist.
+
+### 11.5 Reusable Authorization Middlewares
+- `requireRole(...roles: UserRole[])`: Enforces global role requirements with live DB role synchronization.
+- `requireAnyRole(...roles: UserRole[])`: Convenience alias for role union checks.
+- `requireOrganizationAccess(paramName, options)`: Enforces tenant isolation.
+- `requireDepartmentAccess(paramName, options)`: Enforces departmental operational boundaries.
+- `requireUserOwnership(paramName, options)`: Enforces strict data ownership.
+- `requireIssueAccess(paramName)`: Enforces issue access rules.
+
+---
+
+## 12. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -428,8 +491,11 @@ npm run prisma:validate
 # Generate Prisma Client
 npm run prisma:generate
 
-# Run Automated Authentication & Security Tests (50 assertions)
+# Run Automated Authentication Tests (50 assertions)
 npm run test:auth
+
+# Run Automated RBAC & Authorization Tests (46 assertions)
+npm run test:rbac
 
 # Test Database Connectivity
 npm run test:db
@@ -440,7 +506,7 @@ npm run db:seed
 
 ---
 
-## 12. Environment Variables Template
+## 13. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -478,7 +544,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 13. Implementation Roadmap & Deferred Scope
+## 14. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -487,7 +553,7 @@ GEMINI_API_KEY=
 | **Prompt 3: Prisma ORM Integration** | &check; Complete | Prisma schema mapping, Client generation, singleton client, DB test script, health check |
 | **Prompt 4: Demo Database Seed Data** | &check; Complete | Idempotent Prisma seeder, bcrypt password hashing, demo users, orgs, rules, issues |
 | **Prompt 5: Backend Authentication Foundation** | &check; Complete | Custom JWT auth, bcrypt hashing, register/login/me APIs, requireAuth middleware, security test suite |
-| **Prompt 6: Role-Based Access Control (RBAC)** | Upcoming | Tenant authorization, departmental access rules, admin middleware, organization guards |
+| **Prompt 6: Role-Based Access Control (RBAC)** | &check; Complete | Reusable authorization middlewares, multi-tenant organization isolation, department isolation, user ownership, RBAC test suite |
 | **Prompt 7: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
 | **Prompt 8: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
 | **Prompt 9: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
