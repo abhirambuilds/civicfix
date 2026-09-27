@@ -84,6 +84,34 @@ export interface IssueAiRoutingResponse {
   analysis: IssueAiRouting | null;
 }
 
+export interface DuplicateDetectionAssessment {
+  isDuplicate: boolean;
+  confidence: number;
+  matchedIssueId: string | null;
+  matchedIssueReference: string | null;
+  reason: string;
+  similaritySignals: string[];
+}
+
+export interface IssueDuplicateAnalysis {
+  id: string;
+  issueId: string;
+  agentType: 'DUPLICATE_DETECTION';
+  status: AiAnalysisStatus;
+  modelProvider: string | null;
+  modelName: string | null;
+  confidence: number | null;
+  assessment: DuplicateDetectionAssessment | null;
+  source: 'AI' | 'NO_CANDIDATES' | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface IssueDuplicateAnalysisResponse {
+  analysis: IssueDuplicateAnalysis | null;
+}
+
 export interface User {
   id: string;
   name: string;

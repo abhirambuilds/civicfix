@@ -25,6 +25,7 @@ import { checkUserOrgMembership } from './organization.service.js';
 import { registerFallbackIssue } from './image.service.js';
 import { enqueueIssueIntelligenceAnalysis } from './issue-intelligence.service.js';
 import { enqueueSmartRoutingAnalysis } from './smart-routing.service.js';
+import { enqueueDuplicateDetectionAnalysis, registerDuplicateIssueSnapshot } from './duplicate-detection.service.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -756,6 +757,33 @@ export async function createIssue(
         address: createdIssue.location?.address,
         landmark: createdIssue.location?.landmark,
       });
+      registerDuplicateIssueSnapshot({
+        id: createdIssue.id,
+        issueNumber: createdIssue.issueNumber,
+        organizationId: createdIssue.organization.id,
+        categoryId: createdIssue.category.id,
+        category: createdIssue.category.name,
+        title: createdIssue.title,
+        description: createdIssue.description,
+        status: createdIssue.status,
+        latitude: createdIssue.location?.latitude ?? 0,
+        longitude: createdIssue.location?.longitude ?? 0,
+        landmark: createdIssue.location?.landmark,
+        createdAt: createdIssue.createdAt,
+      });
+      enqueueDuplicateDetectionAnalysis({
+        issueId: createdIssue.id,
+        issueNumber: createdIssue.issueNumber,
+        organizationId: createdIssue.organization.id,
+        categoryId: createdIssue.category.id,
+        category: createdIssue.category.name,
+        title: createdIssue.title,
+        description: createdIssue.description,
+        latitude: createdIssue.location?.latitude ?? 0,
+        longitude: createdIssue.location?.longitude ?? 0,
+        landmark: createdIssue.location?.landmark,
+        createdAt: createdIssue.createdAt,
+      });
       return result;
     } catch {
       // If DB failed, fallback to in-memory creation
@@ -864,6 +892,33 @@ export async function createIssue(
     category: category.name,
     address,
     landmark,
+  });
+  registerDuplicateIssueSnapshot({
+    id: newId,
+    issueNumber,
+    organizationId: orgResolution.organizationId,
+    categoryId: category.id,
+    category: category.name,
+    title: input.title,
+    description: input.description,
+    status: mockIssue.status,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    landmark,
+    createdAt: mockIssue.createdAt,
+  });
+  enqueueDuplicateDetectionAnalysis({
+    issueId: newId,
+    issueNumber,
+    organizationId: orgResolution.organizationId,
+    categoryId: category.id,
+    category: category.name,
+    title: input.title,
+    description: input.description,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    landmark,
+    createdAt: mockIssue.createdAt,
   });
   return result;
 }

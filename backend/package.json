@@ -24,6 +24,7 @@
     "test:security-remediation": "tsx src/scripts/testSecurityRemediation.ts",
     "test:ai": "tsx src/scripts/testIssueIntelligence.ts",
     "test:routing": "tsx src/scripts/testSmartRouting.ts",
+    "test:duplicate": "tsx src/scripts/testDuplicateDetection.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

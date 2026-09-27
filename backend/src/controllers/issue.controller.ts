@@ -15,6 +15,7 @@ import {
 } from '../services/issue.service.js';
 import { getIssueIntelligenceForIssue } from '../services/issue-intelligence.service.js';
 import { getSmartRoutingForIssue } from '../services/smart-routing.service.js';
+import { getDuplicateDetectionForIssue } from '../services/duplicate-detection.service.js';
 import { issueQuerySchema } from '../validators/issue.validator.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
@@ -127,6 +128,29 @@ export async function getIssueAiRoutingHandler(req: Request, res: Response): Pro
   }
 
   sendSuccess(res, result.data, 'AI smart routing retrieved successfully', 200);
+}
+
+/**
+ * GET /api/issues/:issueId/duplicate-analysis
+ * Return the latest safe advisory duplicate assessment for an authorized viewer.
+ */
+export async function getIssueDuplicateAnalysisHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const result = await getDuplicateDetectionForIssue(
+    req.user.id,
+    req.user.role,
+    req.params.issueId as string,
+  );
+  if (!result.success) {
+    sendError(res, result.error, result.statusCode);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'Duplicate analysis retrieved successfully', 200);
 }
 
 /**

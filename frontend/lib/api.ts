@@ -27,6 +27,7 @@ import {
   OrganizationAnalyticsData,
   IssueAiAnalysisResponse,
   IssueAiRoutingResponse,
+  IssueDuplicateAnalysisResponse,
 } from '@/types';
 
 export const API_BASE_URL =
@@ -289,6 +290,13 @@ export const issuesApi = {
    */
   async getAiRouting(issueId: string): Promise<IssueAiRoutingResponse> {
     return fetchApi<IssueAiRoutingResponse>(`/issues/${issueId}/ai-routing`);
+  },
+
+  /**
+   * Retrieve the latest advisory duplicate detection result.
+   */
+  async getDuplicateAnalysis(issueId: string): Promise<IssueDuplicateAnalysisResponse> {
+    return fetchApi<IssueDuplicateAnalysisResponse>(`/issues/${issueId}/duplicate-analysis`);
   },
 
   /**

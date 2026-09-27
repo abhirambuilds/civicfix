@@ -13,6 +13,7 @@ import {
   getStatusHistoryHandler,
   getIssueAiAnalysisHandler,
   getIssueAiRoutingHandler,
+  getIssueDuplicateAnalysisHandler,
 } from '../controllers/issue.controller.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { validate } from '../validators/validate.middleware.js';
@@ -67,6 +68,12 @@ issueRouter.get('/:issueId/ai-analysis', getIssueAiAnalysisHandler);
  * Retrieve the latest validated Smart Routing recommendation.
  */
 issueRouter.get('/:issueId/ai-routing', getIssueAiRoutingHandler);
+
+/**
+ * GET /api/issues/:issueId/duplicate-analysis
+ * Retrieve the latest advisory duplicate assessment.
+ */
+issueRouter.get('/:issueId/duplicate-analysis', getIssueDuplicateAnalysisHandler);
 
 /**
  * POST /api/issues/:issueId/images
