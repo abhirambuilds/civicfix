@@ -1033,7 +1033,57 @@ Citizen / Staff (Multipart Form Data)
 
 ---
 
-## 17. Development Commands
+## 17. User / Student Dashboard
+
+The User / Student Dashboard is the primary citizen interface for CivicFix. It allows students and community members to track reported issues, monitor real-time lifecycle progression, inspect resolution remarks, and view photographic evidence without administrative clutter.
+
+```
++-----------------------------------------------------------------------------------+
+|  CivicFix  |  Student / Citizen Dashboard                [New Report] [Avatar AR] |
++-----------------------------------------------------------------------------------+
+| Sidebar      |  Welcome Banner ("Welcome back, SRM Campus Student")              |
+|              |  Summary Cards (Total Reports | Under Review | In Progress | Done) |
+| - Dashboard  |                                                                   |
+| - My Issues  |  Recent Issues List                                               |
+| - Report     |  - CF-SRM-2026-0001 (Streetlight flickering) [IN_PROGRESS] [MED]  |
+| - Sign Out   |  - CF-SRM-2026-0002 (Pothole near Tech Park) [REPORTED]    [HIGH] |
+|              |  - CF-SRM-2026-0003 (Water pipe leakage)     [RESOLVED]    [HIGH] |
++-----------------------------------------------------------------------------------+
+```
+
+### 17.1 Dashboard Routes
+
+| Route | Purpose | Key Capabilities |
+|---|---|---|
+| `/login` | Public authentication portal | JWT login, credential validation, session expiry notice, quick demo credentials |
+| `/dashboard` | Main user dashboard | Welcome header, live statistics cards, recent 5 issues, quick action CTAs |
+| `/dashboard/issues` | "My Issues" full list | Search input, status dropdown filter, category dropdown filter, pagination |
+| `/dashboard/issues/[issueId]` | Issue detail & audit view | Issue header, description, resolution card, signed photo evidence modal, lifecycle timeline, public comments |
+| `/dashboard/report` | Report intake entry point | Workflow overview and checklist shell connecting to upcoming map submission |
+
+### 17.2 User Issue Visibility & Data Isolation
+
+- **Authoritative Backend Scoping:** Normal `USER` accounts only receive issues where `reporterId === user.id`. The frontend does not rely on client-side filtering to hide other users' tickets.
+- **No Organization Selection:** Citizens are never asked to choose an administrative tenant. Reports are geographically auto-routed based on campus or municipal service areas.
+- **Internal Remark Protection:** 
+  - Backend strictly enforces `where.isInternal = false` for comments fetched by `USER` role.
+  - The frontend additionally enforces `!comment.isInternal` as defense-in-depth to guarantee internal administrative notes are never rendered.
+
+### 17.3 Authentication & Session Management
+
+- **Custom JWT Storage:** The JWT token received from `POST /api/auth/login` is held in client storage and attached to all subsequent API requests via `Authorization: Bearer <token>`.
+- **401 Interception:** When the backend responds with `401 Unauthorized`, client storage is immediately purged, a global logout event fires, and the user is redirected to `/login?expired=true`.
+- **Client Route Guard:** The `/dashboard` layout verifies session state on load, rendering a smooth skeleton while authenticating and redirecting unauthenticated visitors to `/login`.
+
+### 17.4 Responsive Design & Accessibility
+
+- **Responsive Navigation:** Full persistent sidebar on desktop displays, transitioning to a toggleable slide-over drawer on mobile viewports.
+- **Accessible Status & Priority Badges:** Statuses (`REPORTED`, `UNDER_REVIEW`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`) and priorities (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) use semantic labels, distinct color schemes, pulsing indicators, and bar counts to avoid relying solely on color.
+- **Photo Evidence Preview:** Images are retrieved via 15-minute signed URLs from Supabase Storage and can be inspected in an accessible modal dialog.
+
+---
+
+## 18. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -1093,7 +1143,7 @@ npm run db:seed
 
 ---
 
-## 18. Environment Variables Template
+## 19. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -1131,7 +1181,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 19. Implementation Roadmap & Deferred Scope
+## 20. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -1146,8 +1196,10 @@ GEMINI_API_KEY=
 | **Prompt 9: Core Civic Issue APIs** | &check; Complete | Issue creation, atomic location/history transaction, ownership scoping, IDOR protection, comments, categories, filtering & pagination |
 | **Prompt 10: Assignment & Status Workflow** | &check; Complete | Complete workflow lifecycle, state machine validation, department & staff assignment, auto-transition, priority management, resolution, status/assignment audit history |
 | **Prompt 11: Supabase Storage & Image Upload** | &check; Complete | Multipart image uploads, private bucket (`issue-images`), magic-byte validation, short-lived signed URLs, deletion & rollback |
-| **Prompt 12: AI Intelligence & Smart Routing** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
-| **Prompt 13: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+| **Prompt 12: User / Student Dashboard** | &check; Complete | Authenticated student dashboard, stats cards, recent issues, issue details, status timeline, public comments, photo preview |
+| **Prompt 13: Interactive Map & Issue Reporting** | Upcoming | Leaflet, OpenStreetMap, GPS tracking, draggable pin, photo attachment flow |
+| **Prompt 14: Authority & Staff Management UI** | Upcoming | Organization admin dashboard, department lead triage, priority & status management |
+
 
 
 

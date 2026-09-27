@@ -18,6 +18,8 @@ export const metadata: Metadata = {
     'CivicFix is an AI-assisted local issue reporting and resolution platform for communities and campus administrations.',
 };
 
+import { AuthProvider } from '@/lib/auth-context';
+
 export default function RootLayout({
   children,
 }: {
@@ -26,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

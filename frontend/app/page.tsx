@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Header } from '@/components/Header';
 
 export default function Home() {
@@ -24,6 +25,22 @@ export default function Home() {
           CivicFix bridges citizens and administrations with automated routing,
           multi-organization support, and intelligent resolution workflows.
         </p>
+
+        {/* Action Buttons */}
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/dashboard"
+            className="px-6 py-3 rounded-xl font-semibold text-sm text-white bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-600/25 transition-all"
+          >
+            Open Student Dashboard &rarr;
+          </Link>
+          <Link
+            href="/login"
+            className="px-6 py-3 rounded-xl font-semibold text-sm text-slate-300 hover:text-white bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all"
+          >
+            Sign In with Demo Account
+          </Link>
+        </div>
 
         {/* Status / Architecture Cards */}
         <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 w-full text-left">
