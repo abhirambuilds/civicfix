@@ -1199,3 +1199,33 @@ export async function removeOrganizationMember(
     statusCode: 200,
   };
 }
+
+/**
+ * Checks whether a user has active membership in an organization.
+ * Used across service boundaries (e.g. Department member validation).
+ */
+export async function checkUserOrgMembership(
+  userId: string,
+  organizationId: string,
+  db = prisma
+): Promise<boolean> {
+  if (hasDbUrl()) {
+    try {
+      const mem = await db.organizationMember.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId,
+            userId,
+          },
+        },
+      });
+      return Boolean(mem && mem.isActive);
+    } catch {
+      // Fallback
+    }
+  }
+
+  const key = `${organizationId}:${userId}`;
+  const mock = MOCK_MEMBERS.get(key);
+  return Boolean(mock && mock.isActive);
+}

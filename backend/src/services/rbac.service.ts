@@ -90,6 +90,18 @@ const SEEDED_DEPTS: Record<string, { organizationId: string; isActive: boolean }
     organizationId: 'a0000000-0000-0000-0000-000000000001',
     isActive: true,
   },
+  'b0000000-0000-0000-0000-000000000003': {
+    organizationId: 'a0000000-0000-0000-0000-000000000001',
+    isActive: true,
+  },
+  'b0000000-0000-0000-0000-000000000004': {
+    organizationId: 'a0000000-0000-0000-0000-000000000001',
+    isActive: true,
+  },
+  'b0000000-0000-0000-0000-000000000005': {
+    organizationId: 'a0000000-0000-0000-0000-000000000001',
+    isActive: true,
+  },
 };
 
 const SEEDED_DEPT_MEMBERS: Record<string, { roleInDepartment: string; isActive: boolean }> = {

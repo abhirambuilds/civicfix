@@ -15,6 +15,7 @@
     "test:auth": "tsx src/scripts/testAuth.ts",
     "test:rbac": "tsx src/scripts/testRbac.ts",
     "test:org": "tsx src/scripts/testOrganization.ts",
+    "test:dept": "tsx src/scripts/testDepartment.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

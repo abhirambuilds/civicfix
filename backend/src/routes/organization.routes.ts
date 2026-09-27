@@ -21,6 +21,7 @@ import {
   updateMember,
   removeMember,
 } from '../controllers/organization.controller.js';
+import departmentRouter from './department.routes.js';
 
 const organizationRouter = Router();
 
@@ -107,5 +108,11 @@ organizationRouter.delete(
   requireOrganizationAccess('organizationId'),
   removeMember
 );
+
+// ==============================================================================
+// Organization Departments Sub-Router
+// Mounted at: /api/organizations/:organizationId/departments
+// ==============================================================================
+organizationRouter.use('/:organizationId/departments', departmentRouter);
 
 export default organizationRouter;

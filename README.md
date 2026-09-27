@@ -577,7 +577,130 @@ Response (`201 Created`):
 
 ---
 
-## 13. Development Commands
+## 13. Department & Staff Management API
+
+Departments represent functional operating units within an organization (e.g., Civil, Electrical, Sanitation, Water, Maintenance) responsible for resolving routed civic issues. The department management layer enforces strict multi-tenant isolation, cross-tenant validation, and hierarchical staff delegation.
+
+### 13.1 Department Endpoints
+
+| Method | Endpoint | Allowed Roles | Description |
+|---|---|---|---|
+| `POST` | `/api/organizations/:organizationId/departments` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Create a new department in the organization |
+| `GET` | `/api/organizations/:organizationId/departments` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER`, `STAFF` | List departments within authorized organization |
+| `GET` | `/api/organizations/:organizationId/departments/:departmentId` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER`, `STAFF` | Get department details & member count |
+| `PATCH` | `/api/organizations/:organizationId/departments/:departmentId` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Update department name and description |
+| `PATCH` | `/api/organizations/:organizationId/departments/:departmentId/status` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Toggle department active/inactive status |
+
+### 13.2 Department Staff & Member Endpoints
+
+| Method | Endpoint | Allowed Roles | Description |
+|---|---|---|---|
+| `GET` | `/api/organizations/:organizationId/departments/:departmentId/members` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER` (own dept), `STAFF` (own dept) | View department staff roster |
+| `POST` | `/api/organizations/:organizationId/departments/:departmentId/members` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER` (own dept, operational roles) | Add staff member to department |
+| `PATCH` | `/api/organizations/:organizationId/departments/:departmentId/members/:userId` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER` (own dept, cannot modify self/promotions) | Update staff member role or status |
+| `DELETE` | `/api/organizations/:organizationId/departments/:departmentId/members/:userId` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER` (own dept, cannot remove self/managers) | Deactivate staff membership from department |
+
+### 13.3 Department Staff Policy & Pre-requisites
+
+1. **Organization Membership Pre-requisite:**
+   - A user **must already be an active member of the parent organization** before they can be added to any department within that organization.
+   - Enforcing `OrganizationMember` membership first ensures clean organizational containment and prevents external users from being stealthily inserted into department workflows.
+2. **Duplicate Membership Protection:**
+   - A user cannot have duplicate active memberships within the same department. Conflicting additions return `409 Conflict`.
+3. **Manager Operational Scope & Privilege Boundaries:**
+   - A `MANAGER` is strictly scoped to their assigned department.
+   - A `MANAGER` can view and manage staff within their own department only.
+   - A `MANAGER` cannot access or modify other departments (`403 Forbidden`).
+   - A `MANAGER` cannot create new departments or modify organizational settings (`403 Forbidden`).
+   - A `MANAGER` cannot assign the `MANAGER` role to other staff (only `ORG_ADMIN`, `ORG_OWNER`, or `PLATFORM_ADMIN` can assign management positions).
+   - A `MANAGER` cannot modify their own role, remove themselves, or remove fellow managers.
+4. **Staff Scope:**
+   - Operational `STAFF` can only view members within their own department. They are barred from administrative department modifications, status toggles, or staff management.
+5. **Normal Citizen (`USER`) Denial:**
+   - Regular users are strictly denied from accessing administrative department lists, department configurations, and staff rosters.
+6. **Soft-Deactivation & Historical Data Preservation:**
+   - Removing a department member sets `isActive = false` on their `DepartmentMember` record.
+   - The user account, organization membership, and historical issue assignments remain completely intact.
+7. **Inactive Department Behavior:**
+   - Inactive departments are blocked from operational modifications and new member additions.
+   - Inactive departments cannot be used for new issue routing, while existing historical issues remain intact and viewable.
+
+### 13.4 Example Requests & Responses
+
+#### Create Department
+`POST /api/organizations/a0000000-0000-0000-0000-000000000001/departments`
+
+Headers:
+```http
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+Request Body:
+```json
+{
+  "name": "Horticulture & Green Spaces",
+  "code": "HORTICULTURE",
+  "description": "Oversees campus lawns, gardens, tree maintenance, and botanical spaces."
+}
+```
+
+Response (`201 Created`):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "b0000000-0000-0000-0000-000000000015",
+    "organizationId": "a0000000-0000-0000-0000-000000000001",
+    "name": "Horticulture & Green Spaces",
+    "code": "HORTICULTURE",
+    "description": "Oversees campus lawns, gardens, tree maintenance, and botanical spaces.",
+    "isActive": true,
+    "createdAt": "2026-09-27T12:00:00.000Z",
+    "updatedAt": "2026-09-27T12:00:00.000Z",
+    "memberCount": 0
+  },
+  "message": "Department created successfully"
+}
+```
+
+#### Add Department Staff
+`POST /api/organizations/a0000000-0000-0000-0000-000000000001/departments/b0000000-0000-0000-0000-000000000001/members`
+
+Request Body:
+```json
+{
+  "userId": "f0000000-0000-0000-0000-000000000007",
+  "role": "STAFF"
+}
+```
+
+Response (`201 Created`):
+```json
+{
+  "success": true,
+  "data": {
+    "member": {
+      "id": "d0000000-0000-0000-0000-000000000020",
+      "departmentId": "b0000000-0000-0000-0000-000000000001",
+      "userId": "f0000000-0000-0000-0000-000000000007",
+      "deptRole": "STAFF",
+      "isActive": true,
+      "user": {
+        "id": "f0000000-0000-0000-0000-000000000007",
+        "name": "Campus Citizen 2",
+        "email": "citizen2@civicfix.demo",
+        "role": "USER"
+      }
+    }
+  },
+  "message": "Member added to department successfully"
+}
+```
+
+---
+
+## 14. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -619,6 +742,9 @@ npm run test:rbac
 # Run Automated Organization Management Tests (55 assertions)
 npm run test:org
 
+# Run Automated Department & Staff Management Tests (67 assertions)
+npm run test:dept
+
 # Test Database Connectivity
 npm run test:db
 
@@ -628,7 +754,7 @@ npm run db:seed
 
 ---
 
-## 14. Environment Variables Template
+## 15. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -666,7 +792,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 15. Implementation Roadmap & Deferred Scope
+## 16. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -677,6 +803,8 @@ GEMINI_API_KEY=
 | **Prompt 5: Backend Authentication Foundation** | &check; Complete | Custom JWT auth, bcrypt hashing, register/login/me APIs, requireAuth middleware, security test suite |
 | **Prompt 6: Role-Based Access Control (RBAC)** | &check; Complete | Reusable authorization middlewares, multi-tenant organization isolation, department isolation, user ownership, RBAC test suite |
 | **Prompt 7: Platform Admin & Organization Management** | &check; Complete | Multi-tenant organization CRUD, status toggling, safe member management, privilege escalation guards, organization test suite |
-| **Prompt 8: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
-| **Prompt 9: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
-| **Prompt 10: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+| **Prompt 8: Organization Departments & Staff Management** | &check; Complete | Department CRUD, active status lifecycle, department staff rosters, manager boundaries, cross-org/cross-dept isolation |
+| **Prompt 9: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
+| **Prompt 10: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
+| **Prompt 11: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+
