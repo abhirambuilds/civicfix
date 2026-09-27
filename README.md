@@ -79,11 +79,12 @@ CivicFix separates responsibilities into three distinct dashboard contexts:
 - **Runtime:** Node.js
 - **Server Framework:** Express.js
 - **Language:** TypeScript (strict mode, NodeNext module resolution)
+- **ORM:** Prisma Client v6.19.3
 - **Architecture:** Controller-Service-Repository pattern with structured REST API endpoints
 
 ### Database & Storage
 - **Database:** Supabase PostgreSQL
-- **ORM:** Prisma ORM *(configured in Prompt 3)*
+- **ORM:** Prisma ORM ([backend/prisma/schema.prisma](file:///c:/Projects/CivicFix/backend/prisma/schema.prisma))
 - **File Storage:** Supabase Storage (`issue-images` bucket for photographic evidence)
 
 ### Authentication & Security
@@ -102,7 +103,7 @@ CivicFix separates responsibilities into three distinct dashboard contexts:
 
 ## 6. Database Architecture & Schema Overview
 
-The database schema is defined in [supabase/schema.sql](file:///c:/Projects/CivicFix/supabase/schema.sql). It is 100% idempotent, Prisma-friendly, and strictly typed.
+The database schema is defined in [supabase/schema.sql](file:///c:/Projects/CivicFix/supabase/schema.sql) and mirrored 1:1 in [backend/prisma/schema.prisma](file:///c:/Projects/CivicFix/backend/prisma/schema.prisma). It is 100% idempotent, Prisma-friendly, and strictly typed.
 
 ### 6.1 Database Entity Relationship Diagram
 
@@ -170,12 +171,6 @@ erDiagram
 - `ai_analysis_status`: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
 - `notification_type`: `ISSUE_CREATED`, `ISSUE_ASSIGNED`, `STATUS_CHANGED`, `REMARK_ADDED`, `ISSUE_RESOLVED`
 
-### 6.4 Geographic Boundary Architecture (Practical Hybrid Approach)
-`organization_service_areas` utilizes a practical hybrid spatial structure:
-1. **Bounding Box (`min_latitude`, `max_latitude`, `min_longitude`, `max_longitude`):** Enables ultra-fast B-Tree indexed pre-filtering in standard SQL queries (`WHERE :lat BETWEEN min_latitude AND max_latitude AND :lon BETWEEN min_longitude AND max_longitude`).
-2. **GeoJSON Geometry (`boundary_geojson JSONB`):** Stores polygon vertices directly in GeoJSON format. This avoids Prisma's `Unsupported("geometry")` friction, directly integrates with Leaflet maps on the frontend (`L.geoJSON`), and allows server-side point-in-polygon ray-casting.
-3. **PostGIS Compatibility:** The schema safely enables PostGIS (`CREATE EXTENSION IF NOT EXISTS "postgis"`), allowing PostGIS spatial functions (`ST_Contains`, `ST_GeomFromGeoJSON`) to be layered on without requiring it as an absolute dependency.
-
 ---
 
 ## 7. Supabase Setup & Execution Instructions
@@ -193,33 +188,72 @@ erDiagram
 - **Visibility:** Private (`public = false`)
 - **File Size Limit:** 10MB (`10485760` bytes)
 - **Allowed MIME Types:** `image/jpeg`, `image/png`, `image/webp`, `image/gif`
-- **Security & Authorization Model:**
-  CivicFix utilizes custom JWT authentication managed by the Node/Express backend rather than Supabase Auth (GoTrue). Image uploads and access are mediated by the backend using the Supabase Service Role Key to generate time-limited signed URLs or direct streaming uploads. This ensures strict role-based access control without exposing client-side Supabase keys.
-
-### 7.3 Seed Data (Round 1 Focus)
-The SQL script seeds the following initial records with deterministic UUIDs:
-- **Organization:** `SRM Campus Administration` (Type: `UNIVERSITY`, ID: `a0000000-0000-0000-0000-000000000001`)
-- **Departments (5):**
-  1. `Civil / Infrastructure` (`CIVIL`)
-  2. `Electrical` (`ELECTRICAL`)
-  3. `Sanitation & Waste` (`SANITATION`)
-  4. `Water & Drainage` (`WATER`)
-  5. `General Maintenance` (`MAINTENANCE`)
-- **Issue Categories (7):**
-  1. `Pothole / Road` (Priority: `HIGH`)
-  2. `Streetlight` (Priority: `MEDIUM`)
-  3. `Waste` (Priority: `MEDIUM`)
-  4. `Water Leakage` (Priority: `HIGH`)
-  5. `Electrical` (Priority: `CRITICAL`)
-  6. `Infrastructure` (Priority: `MEDIUM`)
-  7. `Other` (Priority: `LOW`)
-- **Service Area:** SRM Kattankulathur Campus (Bounding box + GeoJSON Polygon)
-- **Routing Rules (7):** Configured to route each seeded category directly to its respective department.
-- *Security Note:* User accounts and passwords are **NOT** seeded in the SQL script. Admin and user accounts will be seeded through secure hashing scripts in subsequent prompts.
 
 ---
 
-## 8. Development Commands
+## 8. Prisma ORM & Database Access Layer
+
+Prisma operates as the strongly-typed database client connecting the Express.js backend to Supabase PostgreSQL.
+
+### 8.1 Connecting Prisma to Supabase PostgreSQL
+1. Create a project in [Supabase](https://supabase.com).
+2. Go to **Project Settings** &rarr; **Database** &rarr; **Connection string**.
+3. Copy the **Transaction Mode** (pooled) connection string (typically port `6543`) and assign to `DATABASE_URL`.
+4. Copy the **Session Mode** (direct) connection string (typically port `5432`) and assign to `DIRECT_URL`.
+5. Create `backend/.env` (or copy from `.env.example`) and fill in:
+   ```env
+   DATABASE_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true"
+   DIRECT_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres"
+   ```
+6. **Safety & Secrets:** Never commit `.env` or paste real credentials into version control. `.gitignore` is configured to prevent credential exposure.
+
+### 8.2 Database Architecture Source of Truth
+The canonical source of truth for the database architecture is [supabase/schema.sql](file:///c:/Projects/CivicFix/supabase/schema.sql). 
+
+> [!CAUTION]
+> **Do NOT run destructive commands** such as `prisma migrate reset` or `prisma db push --force-reset`.
+> The database structure is already established via `supabase/schema.sql`. Prisma maps directly to these tables.
+
+### 8.3 Prisma Commands
+From the workspace root (`c:\Projects\CivicFix`):
+
+```bash
+# Validate Prisma schema against definitions
+npm run prisma:validate
+
+# Generate Prisma Client TypeScript types
+npm run prisma:generate
+
+# Test PostgreSQL connection through Prisma
+npm run test:db
+```
+
+### 8.4 Singleton Prisma Client
+The application exports a singleton `PrismaClient` instance from [backend/src/lib/prisma.ts](file:///c:/Projects/CivicFix/backend/src/lib/prisma.ts). During development (`tsx` watch mode), it reuses the existing client instance attached to `globalThis` to prevent connection pool exhaustion.
+
+### 8.5 Database Health Monitoring
+The health endpoint `GET /api/health` performs an active, non-blocking database ping query:
+```json
+{
+  "success": true,
+  "message": "CivicFix backend service operational",
+  "data": {
+    "status": "healthy",
+    "service": "civicfix-backend",
+    "version": "1.0.0",
+    "environment": "development",
+    "database": "connected",
+    "uptimeSeconds": 42,
+    "timestamp": "2026-09-27T11:17:27.470Z"
+  },
+  "timestamp": "2026-09-27T11:17:27.470Z"
+}
+```
+*Note: If `DATABASE_URL` is unconfigured or unreachable, `database` reports `"not_configured"` or `"disconnected"` gracefully without crashing or leaking connection credentials.*
+
+---
+
+## 9. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -245,13 +279,22 @@ npm run typecheck:backend
 
 # Lint Frontend
 npm run lint:frontend
+
+# Validate Prisma Schema
+npm run prisma:validate
+
+# Generate Prisma Client
+npm run prisma:generate
+
+# Test Database Connectivity
+npm run test:db
 ```
 
 ---
 
-## 9. Environment Variables Template
+## 10. Environment Variables Template
 
-Copy `.env.example` to `.env` (backend) and `frontend/.env.local` (frontend):
+Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
 ```env
 # Application Environment
@@ -279,13 +322,13 @@ GEMINI_API_KEY=
 
 ---
 
-## 10. Implementation Roadmap & Deferred Scope
+## 11. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
 | **Prompt 1: Project Foundation** | &check; Complete | Directory structure, Express backend, Next.js frontend, branding, health check |
 | **Prompt 2: Database Schema** | &check; Complete | Supabase PostgreSQL schema, 16 tables, 9 enums, 36 indexes, storage bucket, seed data |
-| **Prompt 3: Prisma ORM Integration** | Upcoming | Prisma schema generation, database connection, client models, migration setup |
+| **Prompt 3: Prisma ORM Integration** | &check; Complete | Prisma schema mapping, Client generation, singleton client, DB test script, health check |
 | **Prompt 4: Authentication & Users** | Upcoming | Custom JWT auth, bcrypt password hashing, login/register, role authorization |
 | **Prompt 5: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
 | **Prompt 6: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |

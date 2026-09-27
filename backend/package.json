@@ -8,17 +8,22 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "tsx src/scripts/validatePrisma.ts",
+    "test:db": "tsx src/scripts/testDbConnection.ts"
   },
   "keywords": [
     "civicfix",
     "express",
     "typescript",
-    "rest-api"
+    "rest-api",
+    "prisma"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2"
@@ -27,6 +32,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.2",
+    "prisma": "^6.19.3",
     "rimraf": "^6.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
