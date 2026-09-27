@@ -11,6 +11,8 @@ export interface AppConfig {
   frontendUrl: string;
   databaseUrl: string;
   directUrl: string;
+  jwtSecret: string;
+  jwtExpiresIn: string;
 }
 
 export const config: AppConfig = {
@@ -19,4 +21,6 @@ export const config: AppConfig = {
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   databaseUrl: process.env.DATABASE_URL || '',
   directUrl: process.env.DIRECT_URL || '',
+  jwtSecret: process.env.JWT_SECRET || 'civicfix-dev-jwt-secret-do-not-use-in-production-change-in-env',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
 };

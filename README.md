@@ -281,7 +281,121 @@ The script uses Prisma `upsert` across all entities. You can run `npm run db:see
 
 ---
 
-## 10. Development Commands
+---
+
+## 10. Authentication Architecture & Security Foundation
+
+CivicFix uses a **custom stateless JWT authentication** model paired with `bcryptjs` password hashing. It does **not** rely on third-party auth services (such as Supabase Auth, Clerk, or Firebase), providing full architectural control over user identities and multi-tenant access boundaries.
+
+### 10.1 Key Architecture Principles
+- **Stateless Tokens:** Access tokens are signed using HMAC-SHA256 (`HS256`) and verified server-side with `JWT_SECRET`.
+- **Minimal Token Payload:** The JWT payload contains only essential identity metadata to reduce overhead and prevent credential leakage:
+  ```json
+  {
+    "sub": "f0000000-0000-0000-0000-000000000006",
+    "role": "USER",
+    "iat": 1727436000,
+    "exp": 1727522400
+  }
+  ```
+- **Privilege Escalation Protection:** Public registration **always** creates accounts with `role: USER`. Any registration request attempting to supply administrative roles (`PLATFORM_ADMIN`, `ORG_ADMIN`, `ORG_OWNER`, `MANAGER`, `STAFF`) or organization IDs is rejected with `400 Bad Request`.
+- **No Password Exposure:** Passwords and password hashes are **never** returned in API responses, never logged, and never included in JWT payloads.
+- **Enumeration Attack Prevention:** Login failures return a generic error message (`"Invalid email or password."`) regardless of whether the email was not found or the password was incorrect.
+- **Stateless Logout:** Because tokens are stateless, logout is handled client-side by clearing the locally stored token. The backend does not implement token blacklists at this stage.
+
+### 10.2 Authentication Endpoints
+
+#### 1. Public Registration
+```http
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Alex Student",
+  "email": "alex.student@srm.edu",
+  "password": "StrongPassword123!"
+}
+```
+**Response (`201 Created`):**
+```json
+{
+  "success": true,
+  "message": "Registration successful",
+  "data": {
+    "user": {
+      "id": "c1a2b3c4-...",
+      "name": "Alex Student",
+      "email": "alex.student@srm.edu",
+      "role": "USER",
+      "isActive": true,
+      "createdAt": "2026-09-27T12:00:00.000Z",
+      "updatedAt": "2026-09-27T12:00:00.000Z"
+    }
+  }
+}
+```
+
+#### 2. User Login
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "email": "alex.student@srm.edu",
+  "password": "StrongPassword123!"
+}
+```
+**Response (`200 OK`):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "c1a2b3c4-...",
+      "name": "Alex Student",
+      "email": "alex.student@srm.edu",
+      "role": "USER"
+    }
+  }
+}
+```
+
+#### 3. Current User Profile
+```http
+GET /api/auth/me
+Authorization: Bearer <token>
+```
+**Response (`200 OK`):**
+```json
+{
+  "success": true,
+  "message": "Current user profile retrieved",
+  "data": {
+    "user": {
+      "id": "c1a2b3c4-...",
+      "name": "Alex Student",
+      "email": "alex.student@srm.edu",
+      "role": "USER",
+      "isActive": true,
+      "createdAt": "2026-09-27T12:00:00.000Z",
+      "updatedAt": "2026-09-27T12:00:00.000Z"
+    }
+  }
+}
+```
+
+### 10.3 Reusable Authentication Middleware (`requireAuth`)
+Protected backend routes use the `requireAuth` middleware:
+1. Validates the `Authorization: Bearer <token>` header.
+2. Verifies signature and expiration using `verifyToken()`.
+3. Attaches strongly-typed user claims (`req.user = { id, role }`) to the Express `Request` object.
+4. Returns `401 Unauthorized` for missing, expired, malformed, or forged tokens without leaking internal stack traces.
+
+---
+
+## 11. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -314,6 +428,9 @@ npm run prisma:validate
 # Generate Prisma Client
 npm run prisma:generate
 
+# Run Automated Authentication & Security Tests (50 assertions)
+npm run test:auth
+
 # Test Database Connectivity
 npm run test:db
 
@@ -323,7 +440,7 @@ npm run db:seed
 
 ---
 
-## 11. Environment Variables Template
+## 12. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -344,7 +461,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 # Authentication (Custom JWT + bcrypt)
 JWT_SECRET=
-JWT_EXPIRES_IN=7d
+JWT_EXPIRES_IN=24h
 
 # Database Demo Seed Passwords (Required by npm run db:seed)
 SEED_PLATFORM_ADMIN_PASSWORD=
@@ -361,7 +478,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 12. Implementation Roadmap & Deferred Scope
+## 13. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -369,7 +486,8 @@ GEMINI_API_KEY=
 | **Prompt 2: Database Schema** | &check; Complete | Supabase PostgreSQL schema, 16 tables, 9 enums, 36 indexes, storage bucket, seed data |
 | **Prompt 3: Prisma ORM Integration** | &check; Complete | Prisma schema mapping, Client generation, singleton client, DB test script, health check |
 | **Prompt 4: Demo Database Seed Data** | &check; Complete | Idempotent Prisma seeder, bcrypt password hashing, demo users, orgs, rules, issues |
-| **Prompt 5: Authentication & Users** | Upcoming | Custom JWT auth, bcrypt verification, login/register, cookie sessions, RBAC |
-| **Prompt 6: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
-| **Prompt 7: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
-| **Prompt 8: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+| **Prompt 5: Backend Authentication Foundation** | &check; Complete | Custom JWT auth, bcrypt hashing, register/login/me APIs, requireAuth middleware, security test suite |
+| **Prompt 6: Role-Based Access Control (RBAC)** | Upcoming | Tenant authorization, departmental access rules, admin middleware, organization guards |
+| **Prompt 7: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
+| **Prompt 8: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
+| **Prompt 9: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |

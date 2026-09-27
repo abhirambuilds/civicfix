@@ -40,7 +40,11 @@ app.use(notFound);
 app.use(errorHandler);
 
 // Start server if executed directly
-if (process.env.NODE_ENV !== 'test') {
+const isDirectExecution =
+  process.argv[1] &&
+  (process.argv[1].endsWith('index.ts') || process.argv[1].endsWith('index.js'));
+
+if (isDirectExecution && process.env.NODE_ENV !== 'test') {
   app.listen(config.port, () => {
     console.log(`[CivicFix Backend] Server running on port ${config.port} (${config.env})`);
     console.log(`[CivicFix Backend] Health check: http://localhost:${config.port}/api/health`);

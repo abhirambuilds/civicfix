@@ -1,6 +1,5 @@
 /**
  * CivicFix - Request Validators Layer
- * Encapsulates runtime schema validation for incoming HTTP request payloads.
- * Future validators: issueSchema, authSchema, organizationSchema, etc.
  */
-export {};
+export * from './auth.validator.js';
+export * from './validate.middleware.js';
