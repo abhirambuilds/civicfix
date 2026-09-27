@@ -187,9 +187,52 @@ export interface IssueQueryParams {
 }
 
 /**
+ * Payload for reporting a new civic issue
+ */
+export interface CreateIssueInput {
+  title: string;
+  description: string;
+  categoryId: string;
+  latitude: number;
+  longitude: number;
+  locationLabel?: string | null;
+  address?: string | null;
+  landmark?: string | null;
+}
+
+/**
  * Issues API Service
  */
 export const issuesApi = {
+  /**
+   * Report/create a new civic issue
+   */
+  async create(input: CreateIssueInput): Promise<Issue> {
+    return fetchApi<Issue>('/issues', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
+  /**
+   * Upload an image attachment to an issue (multipart/form-data, field: "image")
+   */
+  async uploadImage(
+    issueId: string,
+    file: File,
+    isPrimary: boolean = false
+  ): Promise<IssueImage> {
+    const formData = new FormData();
+    formData.append('image', file);
+    if (isPrimary) {
+      formData.append('isPrimary', 'true');
+    }
+    return fetchApi<IssueImage>(`/issues/${issueId}/images`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
   /**
    * List issues with role-scoping and query filters
    */

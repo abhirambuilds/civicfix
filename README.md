@@ -1118,7 +1118,48 @@ CivicFix features an interactive, privacy-respecting location selection system b
 
 ---
 
-## 19. Development Commands
+## 19. Citizen & Student Issue Reporting Flow
+
+The primary intake channel for CivicFix allows citizens and students to report defects, hazards, and infrastructure issues with real-time location pinpointing and photo evidence.
+
+```
++------------------------------------------------------------------------------------------------+
+|  Report an Issue - "Help your campus/community identify and resolve local issues."             |
++------------------------------------------------------------------------------------------------+
+|  [ Category Select ]     |  Where is the issue?                                                |
+|  - Pothole / Road        |  +---------------------------------------------------------------+  |
+|  - Streetlight           |  | OpenStreetMap Container & Pin Marker                          |  |
+|  - Waste / Sanitation    |  | Lat: 12.823600 | Lng: 80.045400  [Use My Current Location]    |  |
+|                          |  +---------------------------------------------------------------+  |
+|  [ Issue Description ]   |  Landmark / Room Details (Optional)                                 |
+|  - Min 10, Max 3000 chars|  "Near Hostel Block 3 main gate, 2nd floor walkway"                 |
+|                          +---------------------------------------------------------------------+
+|  [ Attach Photos ]                                                                             |
+|  - Drag & drop or browse (Up to 5 images, JPEG/PNG/WebP, max 5 MB each)                        |
+|  - Thumbnail previews, primary photo badge, removal buttons                                    |
++------------------------------------------------------------------------------------------------+
+|  [Back to Dashboard]                                                     [Submit Issue ->]     |
++------------------------------------------------------------------------------------------------+
+```
+
+### 19.1 Intake Workflow & Safety Guarantees
+
+1. **Category Retrieval:** Dynamically fetched from `GET /api/issue-categories`. Displays only active categories with descriptions; includes an in-place retry action on network errors.
+2. **Authoritative JWT Association:** The reporter's identity is strictly derived from the authenticated session token on the backend. No client-supplied user IDs or status fields are accepted.
+3. **Smart Title Fallback:** While citizens primarily provide the rich description, an issue title is automatically derived (or user-customized) to satisfy strict backend schema constraints (`min 5, max 200`).
+4. **Photo Attachment & Preview:**
+   - Multi-file drag-and-drop with client-side format (`image/jpeg`, `image/png`, `image/webp`) and file size (`<= 5 MB`) filtering.
+   - Live thumbnail previews with automatic object URL memory cleanup.
+   - Primary photo designation on the first thumbnail for dashboard listings.
+5. **Sequential Multi-Phase Submission:**
+   - Phase 1: `POST /api/issues` creates the ticket in initial `REPORTED` status and generates the reference number.
+   - Phase 2: Sequential multipart uploads to `POST /api/issues/:issueId/images`.
+   - Partial failure resilience: If any photo upload fails, the issue is not lost; warnings are clearly presented with advice to re-attach from the issue details screen.
+6. **Immediate Post-Submission Routing:** Confirms submission with the assigned issue number (e.g. `Issue #CF-SRMCAM-2026-BZXQS`) and routes directly to `/dashboard/issues/:issueId`.
+
+---
+
+## 20. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -1178,7 +1219,7 @@ npm run db:seed
 
 ---
 
-## 20. Environment Variables Template
+## 21. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -1216,7 +1257,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 21. Implementation Roadmap & Deferred Scope
+## 22. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -1233,8 +1274,9 @@ GEMINI_API_KEY=
 | **Prompt 11: Supabase Storage & Image Upload** | &check; Complete | Multipart image uploads, private bucket (`issue-images`), magic-byte validation, short-lived signed URLs, deletion & rollback |
 | **Prompt 12: User / Student Dashboard** | &check; Complete | Authenticated student dashboard, stats cards, recent issues, issue details, status timeline, public comments, photo preview |
 | **Prompt 13: Leaflet & OpenStreetMap Location Selection** | &check; Complete | Reusable LocationPicker component, OpenStreetMap tiles, draggable pin, map-click positioning, GPS detection |
-| **Prompt 14: Interactive Issue Reporting Flow** | Upcoming | Category selection, description, photo attachment integration, issue creation submission |
+| **Prompt 14: Interactive Issue Reporting Flow** | &check; Complete | Complete citizen report flow, dynamic category selection, description & location validation, photo dropzone, multi-phase submission |
 | **Prompt 15: Authority & Staff Management UI** | Upcoming | Organization admin dashboard, department lead triage, priority & status management |
+
 
 
 

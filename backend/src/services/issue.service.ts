@@ -22,6 +22,7 @@ import {
   registerSeededIssue,
 } from './rbac.service.js';
 import { checkUserOrgMembership } from './organization.service.js';
+import { registerFallbackIssue } from './image.service.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -758,6 +759,12 @@ export async function createIssue(
   registerSeededIssue(newId, {
     reporterId: userId,
     organizationId: orgResolution.organizationId,
+  });
+  registerFallbackIssue({
+    id: newId,
+    reporterId: userId,
+    organizationId: orgResolution.organizationId,
+    assignments: [],
   });
 
   const mockLoc: MockLocation = {
