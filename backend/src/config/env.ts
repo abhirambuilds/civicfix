@@ -17,6 +17,7 @@ export interface AppConfig {
   supabaseServiceRoleKey: string;
   groqApiKey: string;
   groqModel: string;
+  groqVisionModel: string;
 }
 
 const DEVELOPMENT_JWT_SECRET =
@@ -51,6 +52,7 @@ export function createAppConfig(environment: NodeJS.ProcessEnv = process.env): A
     supabaseServiceRoleKey: environment.SUPABASE_SERVICE_ROLE_KEY || '',
     groqApiKey: environment.GROQ_API_KEY?.trim() || '',
     groqModel: environment.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile',
+    groqVisionModel: environment.GROQ_VISION_MODEL?.trim() || 'meta-llama/llama-4-scout-17b-16e-instruct',
   };
 }
 

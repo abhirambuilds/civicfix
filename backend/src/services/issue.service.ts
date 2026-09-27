@@ -820,6 +820,9 @@ export async function createIssue(
     reporterId: userId,
     organizationId: orgResolution.organizationId,
     assignments: [],
+    title: input.title,
+    description: input.description,
+    category: category.name,
   });
 
   const mockLoc: MockLocation = {

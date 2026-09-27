@@ -14,6 +14,7 @@ import {
   getIssueAiAnalysisHandler,
   getIssueAiRoutingHandler,
   getIssueDuplicateAnalysisHandler,
+  getIssueImageVerificationHandler,
 } from '../controllers/issue.controller.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { validate } from '../validators/validate.middleware.js';
@@ -74,6 +75,12 @@ issueRouter.get('/:issueId/ai-routing', getIssueAiRoutingHandler);
  * Retrieve the latest advisory duplicate assessment.
  */
 issueRouter.get('/:issueId/duplicate-analysis', getIssueDuplicateAnalysisHandler);
+
+/**
+ * GET /api/issues/:issueId/image-verification
+ * Retrieve the latest advisory image verification result.
+ */
+issueRouter.get('/:issueId/image-verification', getIssueImageVerificationHandler);
 
 /**
  * POST /api/issues/:issueId/images

@@ -10,3 +10,4 @@ export * from './analytics.service.js';
 export * from './issue-intelligence.service.js';
 export * from './smart-routing.service.js';
 export * from './duplicate-detection.service.js';
+export * from './image-verification.service.js';

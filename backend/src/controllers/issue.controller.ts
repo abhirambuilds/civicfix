@@ -16,6 +16,7 @@ import {
 import { getIssueIntelligenceForIssue } from '../services/issue-intelligence.service.js';
 import { getSmartRoutingForIssue } from '../services/smart-routing.service.js';
 import { getDuplicateDetectionForIssue } from '../services/duplicate-detection.service.js';
+import { getImageVerificationForIssue } from '../services/image-verification.service.js';
 import { issueQuerySchema } from '../validators/issue.validator.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
@@ -151,6 +152,17 @@ export async function getIssueDuplicateAnalysisHandler(req: Request, res: Respon
   }
 
   sendSuccess(res, result.data, 'Duplicate analysis retrieved successfully', 200);
+}
+
+/**
+ * GET /api/issues/:issueId/image-verification
+ * Return the latest advisory image verification result for an authorized viewer.
+ */
+export async function getIssueImageVerificationHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) { sendError(res, 'Authentication required.', 401); return; }
+  const result = await getImageVerificationForIssue(req.user.id, req.user.role, req.params.issueId as string);
+  if (!result.success) { sendError(res, result.error, result.statusCode); return; }
+  sendSuccess(res, result.data, 'AI image verification retrieved successfully', 200);
 }
 
 /**

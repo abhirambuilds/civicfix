@@ -90,6 +90,14 @@ export interface StorageDeleteResult {
   isMock?: boolean;
 }
 
+export interface StorageDownloadResult {
+  success: boolean;
+  buffer?: Buffer;
+  mimeType?: string;
+  error?: string;
+  isMock?: boolean;
+}
+
 /**
  * Uploads an image binary buffer to the private `issue-images` bucket.
  * Handles both live Supabase Storage and offline test fallback.
@@ -245,4 +253,35 @@ export async function deleteFileFromStorage(
     success: true,
     isMock: true,
   };
+}
+
+/**
+ * Downloads an object through the server-only storage client. This is used by
+ * backend analysis jobs and never accepts a user-provided URL.
+ */
+export async function downloadFileFromStorage(
+  storagePath: string
+): Promise<StorageDownloadResult> {
+  const client = getSupabaseClient();
+
+  if (client) {
+    try {
+      const { data, error } = await client.storage.from(STORAGE_BUCKET).download(storagePath);
+      if (error || !data) {
+        return { success: false, error: error?.message || 'Failed to retrieve storage object.', isMock: false };
+      }
+      return {
+        success: true,
+        buffer: Buffer.from(await data.arrayBuffer()),
+        mimeType: data.type || undefined,
+        isMock: false,
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Exception retrieving storage object.', isMock: false };
+    }
+  }
+
+  const object = mockStorageMap.get(storagePath);
+  if (!object) return { success: false, error: 'Storage object not found in mock store.', isMock: true };
+  return { success: true, buffer: Buffer.from(object.buffer), mimeType: object.mimeType, isMock: true };
 }

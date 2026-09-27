@@ -28,6 +28,7 @@ import {
   IssueAiAnalysisResponse,
   IssueAiRoutingResponse,
   IssueDuplicateAnalysisResponse,
+  IssueImageVerificationResponse,
 } from '@/types';
 
 export const API_BASE_URL =
@@ -297,6 +298,10 @@ export const issuesApi = {
    */
   async getDuplicateAnalysis(issueId: string): Promise<IssueDuplicateAnalysisResponse> {
     return fetchApi<IssueDuplicateAnalysisResponse>(`/issues/${issueId}/duplicate-analysis`);
+  },
+
+  async getImageVerification(issueId: string): Promise<IssueImageVerificationResponse> {
+    return fetchApi<IssueImageVerificationResponse>(`/issues/${issueId}/image-verification`);
   },
 
   /**

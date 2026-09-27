@@ -25,6 +25,7 @@
     "test:ai": "tsx src/scripts/testIssueIntelligence.ts",
     "test:routing": "tsx src/scripts/testSmartRouting.ts",
     "test:duplicate": "tsx src/scripts/testDuplicateDetection.ts",
+    "test:image-verification": "tsx src/scripts/testImageVerification.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

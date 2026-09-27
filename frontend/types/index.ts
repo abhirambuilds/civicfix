@@ -112,6 +112,31 @@ export interface IssueDuplicateAnalysisResponse {
   analysis: IssueDuplicateAnalysis | null;
 }
 
+export type ImageVerificationDecision = 'RELEVANT' | 'NOT_RELEVANT' | 'UNCERTAIN';
+export interface ImageVerificationAssessment {
+  isRelevant: ImageVerificationDecision;
+  confidence: number;
+  detectedIssueType: string;
+  visualSummary: string;
+  evidence: string[];
+  concerns: string[];
+}
+export interface IssueImageVerification {
+  id: string;
+  issueId: string;
+  imageId: string | null;
+  agentType: 'IMAGE_VERIFICATION';
+  status: AiAnalysisStatus;
+  modelProvider: string | null;
+  modelName: string | null;
+  confidence: number | null;
+  assessment: ImageVerificationAssessment | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+export interface IssueImageVerificationResponse { analysis: IssueImageVerification | null; }
+
 export interface User {
   id: string;
   name: string;

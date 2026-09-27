@@ -23,6 +23,7 @@ import {
 } from '../utils/imageValidation.js';
 import { canAccessIssue, getUserOrganizationMembership, getUserDepartmentMembership } from './rbac.service.js';
 import { ServiceResult } from './auth.service.js';
+import { enqueueImageVerificationAnalysis } from './image-verification.service.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -64,6 +65,9 @@ interface FallbackIssueInfo {
   reporterId: string;
   organizationId: string;
   assignments: Array<{ departmentId?: string; assignedUserId?: string }>;
+  title?: string;
+  description?: string;
+  category?: string;
 }
 
 const FALLBACK_ISSUES: Map<string, FallbackIssueInfo> = new Map([
@@ -79,6 +83,9 @@ const FALLBACK_ISSUES: Map<string, FallbackIssueInfo> = new Map([
           assignedUserId: 'f0000000-0000-0000-0000-000000000005', // Staff
         },
       ],
+      title: 'Streetlight flickering near Hostel 3 walkway',
+      description: 'Outdoor streetlight lamp post #14 flickers intermittently and shuts off completely after 9 PM.',
+      category: 'Streetlight',
     },
   ],
   [
@@ -93,6 +100,9 @@ const FALLBACK_ISSUES: Map<string, FallbackIssueInfo> = new Map([
           assignedUserId: 'f0000000-0000-0000-0000-000000000004', // Manager
         },
       ],
+      title: 'Pothole on Main Campus Avenue near Tech Park',
+      description: 'Deep pothole formed on the right lane near the Tech Park roundabout.',
+      category: 'Pothole / Road',
     },
   ],
 ]);
@@ -116,6 +126,9 @@ async function getIssueContext(
           id: true,
           reporterId: true,
           organizationId: true,
+          title: true,
+          description: true,
+          category: { select: { name: true } },
           assignments: {
             where: { isActive: true },
             select: { departmentId: true, assignedUserId: true },
@@ -131,6 +144,9 @@ async function getIssueContext(
             departmentId: a.departmentId || undefined,
             assignedUserId: a.assignedUserId || undefined,
           })),
+          title: issue.title,
+          description: issue.description,
+          category: issue.category?.name,
         };
       }
     } catch {
@@ -344,6 +360,17 @@ export async function uploadIssueImage(
 
   // 12. Generate short-lived signed URL for immediate preview (15 minutes)
   const signedUrlResult = await createSignedFileUrl(storagePath, 900);
+
+  enqueueImageVerificationAnalysis({
+    issueId,
+    imageId: savedImage.id,
+    storagePath,
+    mimeType: file.mimetype,
+    fileSize: file.size,
+    title: issue.title,
+    description: issue.description,
+    category: issue.category,
+  });
 
   return {
     success: true,
