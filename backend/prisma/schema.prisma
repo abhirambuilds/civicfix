@@ -451,6 +451,7 @@ model AiAnalysis {
 
   @@index([issueId], map: "idx_ai_analyses_issue_id")
   @@index([agentType, status], map: "idx_ai_analyses_agent_status")
+  @@unique([issueId, agentType], map: "uq_ai_analyses_issue_agent")
   @@map("ai_analyses")
 }
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { AiAgentType, AiAnalysisStatus, UserRole } from '@prisma/client';
+import { AiAgentType, AiAnalysisStatus, Prisma, UserRole } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { config } from '../config/env.js';
@@ -154,7 +154,39 @@ async function saveFallback(record: StoredAnalysis): Promise<void> {
   fallbackAnalyses.set(record.issueId, record);
 }
 
+function storedFromDatabase(saved: {
+  id: string;
+  issueId: string;
+  status: AiAnalysisStatus;
+  modelProvider: string | null;
+  modelName: string | null;
+  confidence: unknown;
+  structuredResult: unknown;
+  errorMessage: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+  updatedAt?: Date;
+}, fallback: StoredAnalysis): StoredAnalysis {
+  const parsedResult = issueIntelligenceSchema.safeParse(saved.structuredResult);
+  return {
+    ...fallback,
+    id: saved.id,
+    issueId: saved.issueId,
+    status: saved.status,
+    modelProvider: saved.modelProvider,
+    modelName: saved.modelName,
+    confidence: saved.confidence === null ? null : Number(saved.confidence),
+    structuredResult: parsedResult.success ? parsedResult.data : null,
+    createdAt: saved.createdAt.toISOString(),
+    updatedAt: saved.updatedAt?.toISOString() || saved.createdAt.toISOString(),
+    completedAt: saved.completedAt?.toISOString() || null,
+    errorMessage: saved.errorMessage,
+  };
+}
+
 async function createPending(issueId: string): Promise<StoredAnalysis> {
+  const existingFallback = fallbackAnalyses.get(issueId);
+  if (existingFallback) return existingFallback;
   const fallback = baseAnalysis(issueId);
   if (!hasDbUrl()) {
     await saveFallback(fallback);
@@ -162,6 +194,12 @@ async function createPending(issueId: string): Promise<StoredAnalysis> {
   }
 
   try {
+    const existing = await prisma.aiAnalysis.findFirst({
+      where: { issueId, agentType: AiAgentType.ISSUE_INTELLIGENCE },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) return storedFromDatabase(existing, fallback);
+
     const saved = await prisma.aiAnalysis.create({
       data: {
         issueId,
@@ -171,13 +209,17 @@ async function createPending(issueId: string): Promise<StoredAnalysis> {
         modelName: config.groqModel,
       },
     });
-    return {
-      ...fallback,
-      id: saved.id,
-      createdAt: saved.createdAt.toISOString(),
-      updatedAt: (saved as { updatedAt?: Date }).updatedAt?.toISOString() || saved.createdAt.toISOString(),
-    };
+    return storedFromDatabase(saved, fallback);
   } catch {
+    try {
+      const existing = await prisma.aiAnalysis.findFirst({
+        where: { issueId, agentType: AiAgentType.ISSUE_INTELLIGENCE },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) return storedFromDatabase(existing, fallback);
+    } catch {
+      // Fall through to the offline-safe store.
+    }
     await saveFallback(fallback);
     return fallback;
   }
@@ -195,7 +237,7 @@ async function updateAnalysis(record: StoredAnalysis): Promise<void> {
       data: {
         status: record.status as AiAnalysisStatus,
         confidence: record.confidence,
-        structuredResult: record.structuredResult ?? undefined,
+        structuredResult: record.structuredResult === null ? Prisma.JsonNull : record.structuredResult,
         errorMessage: record.errorMessage || null,
         completedAt: record.completedAt ? new Date(record.completedAt) : null,
       },
@@ -208,6 +250,10 @@ async function updateAnalysis(record: StoredAnalysis): Promise<void> {
 export async function runIssueIntelligenceAnalysis(context: IssueIntelligenceContext): Promise<PublicIssueIntelligenceRecord> {
   const record = await createPending(context.issueId);
   record.status = 'PROCESSING';
+  record.confidence = null;
+  record.structuredResult = null;
+  record.completedAt = null;
+  record.errorMessage = null;
   record.updatedAt = nowIso();
   await updateAnalysis(record);
 
@@ -265,21 +311,7 @@ export async function getIssueIntelligenceForIssue(
         orderBy: { createdAt: 'desc' },
       });
       if (saved) {
-        const parsedResult = issueIntelligenceSchema.safeParse(saved.structuredResult);
-        record = {
-          id: saved.id,
-          issueId: saved.issueId,
-          agentType: 'ISSUE_INTELLIGENCE',
-          status: saved.status,
-          modelProvider: saved.modelProvider,
-          modelName: saved.modelName,
-          confidence: saved.confidence === null ? null : Number(saved.confidence),
-          structuredResult: parsedResult.success ? parsedResult.data : null,
-          createdAt: saved.createdAt.toISOString(),
-          updatedAt: (saved as { updatedAt?: Date }).updatedAt?.toISOString() || saved.createdAt.toISOString(),
-          completedAt: saved.completedAt?.toISOString() || null,
-          errorMessage: saved.errorMessage,
-        };
+        record = storedFromDatabase(saved, baseAnalysis(issueId));
       }
     } catch {
       // Keep the safe in-memory result when the database is unavailable.

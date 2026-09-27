@@ -466,6 +466,7 @@ CREATE INDEX IF NOT EXISTS idx_issue_status_history_issue ON issue_status_histor
 -- AI Analyses
 CREATE INDEX IF NOT EXISTS idx_ai_analyses_issue_id ON ai_analyses(issue_id);
 CREATE INDEX IF NOT EXISTS idx_ai_analyses_agent_status ON ai_analyses(agent_type, status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_analyses_issue_agent ON ai_analyses(issue_id, agent_type);
 
 -- Notifications
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient_read ON notifications(recipient_id, is_read, created_at DESC);
