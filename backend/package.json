@@ -22,6 +22,7 @@
     "test:workflow": "tsx src/scripts/testPrompt18.ts",
     "test:analytics": "tsx src/scripts/testPrompt20.ts",
     "test:security-remediation": "tsx src/scripts/testSecurityRemediation.ts",
+    "test:ai": "tsx src/scripts/testIssueIntelligence.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

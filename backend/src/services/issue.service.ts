@@ -23,6 +23,7 @@ import {
 } from './rbac.service.js';
 import { checkUserOrgMembership } from './organization.service.js';
 import { registerFallbackIssue } from './image.service.js';
+import { enqueueIssueIntelligenceAnalysis } from './issue-intelligence.service.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -730,11 +731,20 @@ export async function createIssue(
         return issue;
       });
 
-      return {
+      const result = {
         success: true,
         data: createdIssue,
         statusCode: 201,
       };
+      enqueueIssueIntelligenceAnalysis({
+        issueId: createdIssue.id,
+        title: createdIssue.title,
+        description: createdIssue.description,
+        category: createdIssue.category.name,
+        address: createdIssue.location?.address,
+        landmark: createdIssue.location?.landmark,
+      });
+      return result;
     } catch {
       // If DB failed, fallback to in-memory creation
     }
@@ -803,7 +813,7 @@ export async function createIssue(
     isActive: true,
   };
 
-  return {
+  const result = {
     success: true,
     data: {
       ...mockIssue,
@@ -824,6 +834,15 @@ export async function createIssue(
     },
     statusCode: 201,
   };
+  enqueueIssueIntelligenceAnalysis({
+    issueId: newId,
+    title: input.title,
+    description: input.description,
+    category: category.name,
+    address,
+    landmark,
+  });
+  return result;
 }
 
 /**

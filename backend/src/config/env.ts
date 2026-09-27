@@ -15,6 +15,8 @@ export interface AppConfig {
   jwtExpiresIn: string;
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
+  groqApiKey: string;
+  groqModel: string;
 }
 
 const DEVELOPMENT_JWT_SECRET =
@@ -47,6 +49,8 @@ export function createAppConfig(environment: NodeJS.ProcessEnv = process.env): A
     jwtExpiresIn: environment.JWT_EXPIRES_IN || '24h',
     supabaseUrl: environment.SUPABASE_URL || '',
     supabaseServiceRoleKey: environment.SUPABASE_SERVICE_ROLE_KEY || '',
+    groqApiKey: environment.GROQ_API_KEY?.trim() || '',
+    groqModel: environment.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile',
   };
 }
 

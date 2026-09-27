@@ -7,3 +7,4 @@ export * from './organization.service.js';
 export * from './department.service.js';
 export * from './issue.service.js';
 export * from './analytics.service.js';
+export * from './issue-intelligence.service.js';

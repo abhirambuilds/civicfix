@@ -375,8 +375,12 @@ CREATE TABLE IF NOT EXISTS ai_analyses (
     structured_result JSONB,
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ
 );
+
+-- Keep existing deployments compatible with the AI analysis updated timestamp.
+ALTER TABLE ai_analyses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 -- ------------------------------------------------------------------------------
 -- 4.16 NOTIFICATIONS
@@ -530,6 +534,11 @@ BEGIN
     DROP TRIGGER IF EXISTS trg_issue_comments_updated_at ON issue_comments;
     CREATE TRIGGER trg_issue_comments_updated_at
         BEFORE UPDATE ON issue_comments
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS trg_ai_analyses_updated_at ON ai_analyses;
+    CREATE TRIGGER trg_ai_analyses_updated_at
+        BEFORE UPDATE ON ai_analyses
         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 END $$;
 

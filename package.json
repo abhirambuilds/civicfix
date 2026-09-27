@@ -23,6 +23,7 @@
     "test:workflow": "npm --prefix backend run test:workflow",
     "test:analytics": "npm --prefix backend run test:analytics",
     "test:security-remediation": "npm --prefix backend run test:security-remediation",
+    "test:ai": "npm --prefix backend run test:ai",
     "db:seed": "npm --prefix backend run db:seed",
     "check": "npm run typecheck:backend && npm run build:backend && npm run build:frontend"
   },

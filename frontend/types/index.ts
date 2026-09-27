@@ -22,6 +22,41 @@ export type IssueStatus =
 
 export type IssuePriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
+export type AiAnalysisStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface IssueIntelligence {
+  normalizedTitle: string;
+  summary: string;
+  severity: IssuePriority;
+  urgency: IssuePriority;
+  impact: IssuePriority;
+  issueType: string;
+  keywords: string[];
+  suggestedPriority: IssuePriority;
+  recommendedAction: string;
+  confidence: number;
+  descriptionSufficient: boolean;
+  clarificationQuestion: string | null;
+}
+
+export interface IssueAiAnalysis {
+  id: string;
+  issueId: string;
+  agentType: 'ISSUE_INTELLIGENCE';
+  status: AiAnalysisStatus;
+  modelProvider: string | null;
+  modelName: string | null;
+  confidence: number | null;
+  structuredResult: IssueIntelligence | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface IssueAiAnalysisResponse {
+  analysis: IssueAiAnalysis | null;
+}
+
 export interface User {
   id: string;
   name: string;

@@ -25,6 +25,7 @@ import {
   OrganizationMemberRole,
   AnalyticsTimeRange,
   OrganizationAnalyticsData,
+  IssueAiAnalysisResponse,
 } from '@/types';
 
 export const API_BASE_URL =
@@ -273,6 +274,13 @@ export const issuesApi = {
    */
   async getById(issueId: string): Promise<Issue> {
     return fetchApi<Issue>(`/issues/${issueId}`);
+  },
+
+  /**
+   * Retrieve the latest safe Issue Intelligence result.
+   */
+  async getAiAnalysis(issueId: string): Promise<IssueAiAnalysisResponse> {
+    return fetchApi<IssueAiAnalysisResponse>(`/issues/${issueId}/ai-analysis`);
   },
 
   /**

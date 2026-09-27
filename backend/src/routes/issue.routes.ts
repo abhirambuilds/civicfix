@@ -11,6 +11,7 @@ import {
   resolveIssueHandler,
   getAssignmentsHandler,
   getStatusHistoryHandler,
+  getIssueAiAnalysisHandler,
 } from '../controllers/issue.controller.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { validate } from '../validators/validate.middleware.js';
@@ -53,6 +54,12 @@ issueRouter.get('/', listIssuesHandler);
  * Retrieve single issue details with verified authorization
  */
 issueRouter.get('/:issueId', getIssueHandler);
+
+/**
+ * GET /api/issues/:issueId/ai-analysis
+ * Retrieve the latest safe AI Issue Intelligence result.
+ */
+issueRouter.get('/:issueId/ai-analysis', getIssueAiAnalysisHandler);
 
 /**
  * POST /api/issues/:issueId/images

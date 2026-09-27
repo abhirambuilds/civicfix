@@ -13,6 +13,7 @@ import {
   getIssueAssignments,
   getIssueStatusHistory,
 } from '../services/issue.service.js';
+import { getIssueIntelligenceForIssue } from '../services/issue-intelligence.service.js';
 import { issueQuerySchema } from '../validators/issue.validator.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
@@ -79,6 +80,29 @@ export async function getIssueHandler(req: Request, res: Response): Promise<void
   }
 
   sendSuccess(res, result.data, 'Issue retrieved successfully', 200);
+}
+
+/**
+ * GET /api/issues/:issueId/ai-analysis
+ * Return the latest safe Issue Intelligence result for an authorized viewer.
+ */
+export async function getIssueAiAnalysisHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const result = await getIssueIntelligenceForIssue(
+    req.user.id,
+    req.user.role,
+    req.params.issueId as string,
+  );
+  if (!result.success) {
+    sendError(res, result.error, result.statusCode);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'AI issue analysis retrieved successfully', 200);
 }
 
 /**
