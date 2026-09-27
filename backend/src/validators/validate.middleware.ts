@@ -23,3 +23,6 @@ export function validateBody<T>(schema: ZodSchema<T>) {
     next();
   };
 }
+
+export const validate = validateBody;
+

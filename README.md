@@ -458,7 +458,126 @@ CivicFix implements a multi-tenant **Role-Based Access Control (RBAC)** architec
 
 ---
 
-## 12. Development Commands
+## 12. Organization Management API
+
+CivicFix is architecturally a multi-organization platform. While SRM Campus Administration is seeded for the demo, all organization management endpoints are generic, parameter-driven, and enforce multi-tenant isolation.
+
+### 12.1 Endpoints Specification
+
+| Method | Endpoint | Allowed Roles | Description |
+|---|---|---|---|
+| `POST` | `/api/organizations` | `PLATFORM_ADMIN` | Creates new tenant organization with server-generated slug. |
+| `GET` | `/api/organizations` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER`, `STAFF` | Lists organizations. Platform Admin views all; operational roles view associated orgs; `USER` rejected (403). |
+| `GET` | `/api/organizations/:organizationId` | `PLATFORM_ADMIN` or active org member | Retrieves organization metadata with member and department counts. |
+| `PATCH` | `/api/organizations/:organizationId` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Updates organization name, description, or orgType. Rejects injected IDs or server fields. |
+| `PATCH` | `/api/organizations/:organizationId/status` | `PLATFORM_ADMIN` strictly | Activates or deactivates an organization (`isActive: boolean`). |
+| `GET` | `/api/organizations/:organizationId/members` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Lists organization members with safe user metadata (passwords/hashes omitted). |
+| `POST` | `/api/organizations/:organizationId/members` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Adds an existing user as an organization member. |
+| `PATCH` | `/api/organizations/:organizationId/members/:userId` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Updates an organization member's role or status. Self-promotion blocked. |
+| `DELETE` | `/api/organizations/:organizationId/members/:userId` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Soft-deactivates organization membership without deleting the underlying user account. |
+
+### 12.2 Authorization & Access Rules
+
+1. **Platform Admin Exclusive Capabilities:**
+   - Only `PLATFORM_ADMIN` can create new organizations.
+   - Only `PLATFORM_ADMIN` can activate or deactivate organizations (`/status`).
+   - Platform admin has global override capabilities across all tenant organizations.
+2. **Organization-Scoped Administrator Capabilities:**
+   - `ORG_OWNER` and `ORG_ADMIN` can manage their own organization's settings and members.
+   - Cross-organization queries or modifications are rejected with `403 Forbidden`.
+   - `MANAGER`, `STAFF`, and `USER` cannot modify organization metadata or manage memberships.
+3. **Public User Protection:**
+   - Ordinary `USER` accounts receive `403 Forbidden` on all organization administration and member endpoints.
+
+### 12.3 Organization Membership & Role Assignment Policy
+
+| Actor Role | Permitted Target Roles for Member Addition / Update | Prohibited Actions |
+|---|---|---|
+| `PLATFORM_ADMIN` | `OWNER`, `ADMIN`, `MANAGER`, `STAFF`, `MEMBER` | None (Platform override) |
+| `ORG_OWNER` | `ADMIN`, `MANAGER`, `STAFF`, `MEMBER` | Cannot assign `PLATFORM_ADMIN` |
+| `ORG_ADMIN` | `MANAGER`, `STAFF`, `MEMBER` | Cannot assign `OWNER` or `ADMIN`; cannot modify existing Owner/Admin |
+| `MANAGER` / `STAFF` / `USER` | None | Cannot add, modify, or remove any members |
+
+**Privilege Escalation Guards:**
+- Users cannot add themselves or modify their own role.
+- Request payload cannot override server-generated fields (`id`, `createdAt`, `updatedAt`, `slug`).
+- Role tampering via request bodies, query strings, or fake headers is rejected.
+
+### 12.4 Inactive Organization Behavior
+- When an organization is deactivated (`isActive: false`), operational updates and new member additions by non-platform users are rejected with `403 Forbidden`.
+- Inactive organizations retain all historical records, department mappings, and issue logs intact. No data is deleted.
+- Only a `PLATFORM_ADMIN` can reactivate a deactivated organization.
+
+### 12.5 Example Requests & Responses
+
+#### Create Organization (`PLATFORM_ADMIN` only)
+```http
+POST /api/organizations
+Authorization: Bearer <PLATFORM_ADMIN_JWT>
+Content-Type: application/json
+
+{
+  "name": "Greater Chennai Corporation",
+  "description": "Civic municipal body for Chennai district",
+  "orgType": "MUNICIPALITY"
+}
+```
+
+Response (`201 Created`):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "a0000000-0000-0000-0000-000000000011",
+    "name": "Greater Chennai Corporation",
+    "slug": "greater-chennai-corporation",
+    "description": "Civic municipal body for Chennai district",
+    "orgType": "MUNICIPALITY",
+    "isActive": true,
+    "createdAt": "2026-09-27T12:00:00.000Z"
+  },
+  "message": "Organization created successfully"
+}
+```
+
+#### Add Organization Member
+```http
+POST /api/organizations/a0000000-0000-0000-0000-000000000001/members
+Authorization: Bearer <ORG_ADMIN_JWT>
+Content-Type: application/json
+
+{
+  "userId": "f0000000-0000-0000-0000-000000000007",
+  "role": "STAFF"
+}
+```
+
+Response (`201 Created`):
+```json
+{
+  "success": true,
+  "data": {
+    "member": {
+      "id": "m0000000-0000-0000-0000-000000000010",
+      "organizationId": "a0000000-0000-0000-0000-000000000001",
+      "userId": "f0000000-0000-0000-0000-000000000007",
+      "orgRole": "STAFF",
+      "isActive": true,
+      "user": {
+        "id": "f0000000-0000-0000-0000-000000000007",
+        "name": "Campus Citizen 2",
+        "email": "citizen2@civicfix.demo",
+        "role": "USER"
+      }
+    }
+  },
+  "message": "Member added to organization successfully"
+}
+```
+
+---
+
+## 13. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -494,8 +613,11 @@ npm run prisma:generate
 # Run Automated Authentication Tests (50 assertions)
 npm run test:auth
 
-# Run Automated RBAC & Authorization Tests (46 assertions)
+# Run Automated RBAC & Authorization Tests (47 assertions)
 npm run test:rbac
+
+# Run Automated Organization Management Tests (55 assertions)
+npm run test:org
 
 # Test Database Connectivity
 npm run test:db
@@ -506,7 +628,7 @@ npm run db:seed
 
 ---
 
-## 13. Environment Variables Template
+## 14. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -544,7 +666,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 14. Implementation Roadmap & Deferred Scope
+## 15. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -554,6 +676,7 @@ GEMINI_API_KEY=
 | **Prompt 4: Demo Database Seed Data** | &check; Complete | Idempotent Prisma seeder, bcrypt password hashing, demo users, orgs, rules, issues |
 | **Prompt 5: Backend Authentication Foundation** | &check; Complete | Custom JWT auth, bcrypt hashing, register/login/me APIs, requireAuth middleware, security test suite |
 | **Prompt 6: Role-Based Access Control (RBAC)** | &check; Complete | Reusable authorization middlewares, multi-tenant organization isolation, department isolation, user ownership, RBAC test suite |
-| **Prompt 7: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
-| **Prompt 8: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
-| **Prompt 9: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+| **Prompt 7: Platform Admin & Organization Management** | &check; Complete | Multi-tenant organization CRUD, status toggling, safe member management, privilege escalation guards, organization test suite |
+| **Prompt 8: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
+| **Prompt 9: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
+| **Prompt 10: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
