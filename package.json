@@ -1,0 +1,22 @@
+{
+  "name": "civicfix",
+  "version": "1.0.0",
+  "description": "CivicFix - AI-assisted local issue reporting and resolution platform",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "typecheck:backend": "npm --prefix backend run typecheck",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "check": "npm run typecheck:backend && npm run build:backend && npm run build:frontend"
+  },
+  "keywords": [
+    "civicfix",
+    "issue-reporting",
+    "hackathon"
+  ],
+  "author": "",
+  "license": "ISC"
+}

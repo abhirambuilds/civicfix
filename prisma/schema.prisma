@@ -1,0 +1,15 @@
+// ==============================================================================
+// CivicFix Prisma Schema
+// Round 1 Scope: Multi-organization issue reporting & resolution architecture
+// Models will be defined in subsequent prompts according to database specifications.
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
