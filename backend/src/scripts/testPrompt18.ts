@@ -167,6 +167,20 @@ async function runPrompt18Tests() {
       histData.some((h: any) => h.newStatus === 'IN_PROGRESS'),
       'Status history timeline records IN_PROGRESS transition'
     );
+    assert(
+      histData.some((h: any) => h.remark === 'Field crew has initiated repair work on site.'),
+      'Authorized organization user can see status-history remarks'
+    );
+
+    const citizenHistRes = await fetch(`${baseUrl}/api/issues/${TARGET_ISSUE_ID}/status-history`, {
+      headers: { Authorization: `Bearer ${citizenToken}` },
+    });
+    const citizenHistData = ((await citizenHistRes.json()) as any).data;
+    assert(citizenHistRes.status === 200, 'Citizen can retrieve public status history');
+    assert(
+      citizenHistData.every((h: any) => !Object.prototype.hasOwnProperty.call(h, 'remark')),
+      'Security: Citizen status history omits internal remarks'
+    );
 
     // -------------------------------------------------------------
     // Test 10 & 11: Attempt Invalid Status Transition

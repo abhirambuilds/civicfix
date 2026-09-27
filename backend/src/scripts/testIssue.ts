@@ -187,6 +187,27 @@ async function runIssueTests() {
     });
     assert(injectRes.status === 400, 'Security: Injection of server fields (userId, status) rejected (400 Bad Request)');
 
+    // 1.9 A normal USER cannot choose an arbitrary organization. Routing must
+    // remain under trusted backend service-area logic.
+    const organizationTamperRes = await fetch(`${baseUrl}/api/issues`, {
+      method: 'POST',
+      headers: authHeader(user1Token),
+      body: JSON.stringify({
+        title: 'Unauthorized organization routing attempt',
+        description: 'Attempt to route a campus issue into another organization.',
+        categoryId: POTHOLE_CAT_ID,
+        latitude: 12.823,
+        longitude: 80.045,
+        organizationId: 'a0000000-0000-0000-0000-000000000099',
+      }),
+    });
+    const organizationTamperJson = (await organizationTamperRes.json()) as any;
+    assert(
+      organizationTamperRes.status === 201 &&
+        organizationTamperJson.data?.organization?.id === SRM_ORG_ID,
+      'Security: USER organizationId tampering cannot override trusted routing'
+    );
+
     // ============================================================================
     // SUITE 2: ISSUE CREATION, INITIAL STATUS & LIFECYCLE FOUNDATION
     // ============================================================================

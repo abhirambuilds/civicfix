@@ -461,10 +461,9 @@ function generateIssueNumber(orgSlug: string): string {
 
 /**
  * Resolves the target organization for an issue being reported.
- * 1. Explicit organizationId if provided & valid.
- * 2. Category's assigned organization if set.
- * 3. Geographic service area matching latitude & longitude.
- * 4. Fallback default active organization (never fails).
+ * 1. Category's assigned organization if trusted routing allows it.
+ * 2. Geographic service area matching latitude & longitude.
+ * 3. Fallback default active organization (never fails).
  */
 async function resolveOrganizationForIssue(
   latitude: number,
@@ -475,7 +474,7 @@ async function resolveOrganizationForIssue(
 ): Promise<{ organizationId: string; slug: string; name: string } | null> {
   if (hasDbUrl()) {
     try {
-      // 1. Explicit Org ID
+      // 1. Explicit organization selection is only passed by trusted callers.
       if (explicitOrgId && isValidUuid(explicitOrgId)) {
         const org = await db.organization.findUnique({
           where: { id: explicitOrgId },
@@ -611,12 +610,18 @@ export async function createIssue(
     };
   }
 
-  // 2. Resolve organization dynamically
+  // 2. Resolve organization dynamically. A normal USER's organizationId and
+  // organization-specific category ownership are untrusted client input; the
+  // service area is the authoritative routing source for citizen reports.
+  const maySelectOrganization =
+    userRole === UserRole.PLATFORM_ADMIN ||
+    userRole === UserRole.ORG_OWNER ||
+    userRole === UserRole.ORG_ADMIN;
   const orgResolution = await resolveOrganizationForIssue(
     input.latitude,
     input.longitude,
-    category.organizationId,
-    input.organizationId,
+    maySelectOrganization ? category.organizationId : undefined,
+    maySelectOrganization ? input.organizationId : undefined,
     db
   );
 
@@ -2440,6 +2445,13 @@ export async function getIssueStatusHistory(
           changedBy: { select: { id: true, name: true, role: true } },
         },
       });
+      if (userRole === UserRole.USER) {
+        return {
+          success: true,
+          data: history.map(({ remark: _remark, ...publicEntry }) => publicEntry),
+          statusCode: 200,
+        };
+      }
       return { success: true, data: history, statusCode: 200 };
     } catch {}
   }
@@ -2453,6 +2465,14 @@ export async function getIssueStatusHistory(
       changedBy: user ? { id: user.id, name: user.name, role: user.role } : null,
     };
   });
+
+  if (userRole === UserRole.USER) {
+    return {
+      success: true,
+      data: history.map(({ remark: _remark, ...publicEntry }) => publicEntry),
+      statusCode: 200,
+    };
+  }
 
   return { success: true, data: history, statusCode: 200 };
 }

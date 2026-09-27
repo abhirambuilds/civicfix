@@ -17,14 +17,37 @@ export interface AppConfig {
   supabaseServiceRoleKey: string;
 }
 
-export const config: AppConfig = {
-  env: (process.env.NODE_ENV as AppConfig['env']) || 'development',
-  port: parseInt(process.env.PORT || '5000', 10),
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
-  databaseUrl: process.env.DATABASE_URL || '',
-  directUrl: process.env.DIRECT_URL || '',
-  jwtSecret: process.env.JWT_SECRET || 'civicfix-dev-jwt-secret-do-not-use-in-production-change-in-env',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
-  supabaseUrl: process.env.SUPABASE_URL || '',
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-};
+const DEVELOPMENT_JWT_SECRET =
+  'civicfix-dev-jwt-secret-do-not-use-in-production-change-in-env';
+
+/**
+ * Builds runtime configuration and fails closed for production JWT settings.
+ * The development fallback exists only for the repository's offline/mock mode.
+ */
+export function createAppConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
+  const env = (environment.NODE_ENV as AppConfig['env']) || 'development';
+  const configuredJwtSecret = environment.JWT_SECRET?.trim();
+
+  if (
+    env === 'production' &&
+    (!configuredJwtSecret || configuredJwtSecret === DEVELOPMENT_JWT_SECRET)
+  ) {
+    throw new Error(
+      'JWT_SECRET must be configured with a unique non-development value when NODE_ENV=production.'
+    );
+  }
+
+  return {
+    env,
+    port: parseInt(environment.PORT || '5000', 10),
+    frontendUrl: environment.FRONTEND_URL || 'http://localhost:3000',
+    databaseUrl: environment.DATABASE_URL || '',
+    directUrl: environment.DIRECT_URL || '',
+    jwtSecret: configuredJwtSecret || DEVELOPMENT_JWT_SECRET,
+    jwtExpiresIn: environment.JWT_EXPIRES_IN || '24h',
+    supabaseUrl: environment.SUPABASE_URL || '',
+    supabaseServiceRoleKey: environment.SUPABASE_SERVICE_ROLE_KEY || '',
+  };
+}
+
+export const config = createAppConfig();
