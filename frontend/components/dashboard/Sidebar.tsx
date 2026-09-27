@@ -13,6 +13,7 @@ import {
   IconX,
   IconBuilding,
   IconLayers,
+  IconUsers,
 } from '@/components/ui/Icons';
 
 interface SidebarProps {
@@ -24,6 +25,11 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
   const { user, logout } = useAuth();
 
   const isStaffRole = user?.role && user.role !== 'USER';
+  const canManageDepartments =
+    user?.role === 'PLATFORM_ADMIN' ||
+    user?.role === 'ORG_OWNER' ||
+    user?.role === 'ORG_ADMIN' ||
+    user?.role === 'MANAGER';
 
   const navItems = [
     {
@@ -59,6 +65,16 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
             icon: IconLayers,
             active: pathname.startsWith('/org/issues'),
           },
+          ...(canManageDepartments
+            ? [
+                {
+                  label: 'Departments & Staff',
+                  href: '/org/departments',
+                  icon: IconUsers,
+                  active: pathname.startsWith('/org/departments'),
+                },
+              ]
+            : []),
         ]
       : []),
   ];

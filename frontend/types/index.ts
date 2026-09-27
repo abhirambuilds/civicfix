@@ -226,3 +226,39 @@ export interface DepartmentMemberSummary {
   };
 }
 
+/**
+ * Organization membership roles are intentionally separate from global user roles.
+ * The backend authorizes both records independently.
+ */
+export type OrganizationMemberRole = 'OWNER' | 'ADMIN' | 'MANAGER' | 'STAFF' | 'MEMBER';
+
+export interface ManagedDepartment {
+  id: string;
+  organizationId: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  _count?: {
+    members: number;
+  };
+}
+
+export interface OrganizationMemberSummary {
+  id: string;
+  organizationId: string;
+  userId: string;
+  orgRole: OrganizationMemberRole;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    isActive: boolean;
+  };
+}

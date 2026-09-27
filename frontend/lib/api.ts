@@ -20,6 +20,9 @@ import {
   User,
   OrganizationDashboardData,
   OrganizationDepartmentSummary,
+  ManagedDepartment,
+  OrganizationMemberSummary,
+  OrganizationMemberRole,
 } from '@/types';
 
 export const API_BASE_URL =
@@ -435,5 +438,135 @@ export const organizationsApi = {
       `/organizations/me/departments/${departmentId}/members`
     );
   },
-};
 
+  /**
+   * Management endpoints retain the organization path parameter required by the
+   * established REST API. The server validates that ID against the authenticated
+   * organization membership on every request; callers never submit it in a form.
+   */
+  async listManagedDepartments(
+    organizationId: string
+  ): Promise<{ departments: ManagedDepartment[] }> {
+    return fetchApi<{ departments: ManagedDepartment[] }>(
+      `/organizations/${organizationId}/departments`
+    );
+  },
+
+  async getManagedDepartment(
+    organizationId: string,
+    departmentId: string
+  ): Promise<{ department: ManagedDepartment }> {
+    return fetchApi<{ department: ManagedDepartment }>(
+      `/organizations/${organizationId}/departments/${departmentId}`
+    );
+  },
+
+  async createDepartment(
+    organizationId: string,
+    input: { name: string; description?: string | null; code?: string | null }
+  ): Promise<ManagedDepartment> {
+    return fetchApi<ManagedDepartment>(`/organizations/${organizationId}/departments`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
+  async updateDepartment(
+    organizationId: string,
+    departmentId: string,
+    input: { name?: string; description?: string | null; code?: string | null }
+  ): Promise<{ department: ManagedDepartment }> {
+    return fetchApi<{ department: ManagedDepartment }>(
+      `/organizations/${organizationId}/departments/${departmentId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }
+    );
+  },
+
+  async updateDepartmentStatus(
+    organizationId: string,
+    departmentId: string,
+    isActive: boolean
+  ): Promise<{ department: ManagedDepartment }> {
+    return fetchApi<{ department: ManagedDepartment }>(
+      `/organizations/${organizationId}/departments/${departmentId}/status`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive }),
+      }
+    );
+  },
+
+  async listOrganizationMembers(
+    organizationId: string
+  ): Promise<{ members: OrganizationMemberSummary[] }> {
+    return fetchApi<{ members: OrganizationMemberSummary[] }>(
+      `/organizations/${organizationId}/members`
+    );
+  },
+
+  async updateOrganizationMember(
+    organizationId: string,
+    userId: string,
+    input: { role?: OrganizationMemberRole; isActive?: boolean }
+  ): Promise<{ member: OrganizationMemberSummary }> {
+    return fetchApi<{ member: OrganizationMemberSummary }>(
+      `/organizations/${organizationId}/members/${userId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }
+    );
+  },
+
+  async listManagedDepartmentMembers(
+    organizationId: string,
+    departmentId: string
+  ): Promise<{ members: DepartmentMemberSummary[] }> {
+    return fetchApi<{ members: DepartmentMemberSummary[] }>(
+      `/organizations/${organizationId}/departments/${departmentId}/members`
+    );
+  },
+
+  async addDepartmentMember(
+    organizationId: string,
+    departmentId: string,
+    input: { userId: string; roleInDepartment: 'MANAGER' | 'STAFF' }
+  ): Promise<{ member: DepartmentMemberSummary }> {
+    return fetchApi<{ member: DepartmentMemberSummary }>(
+      `/organizations/${organizationId}/departments/${departmentId}/members`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
+  },
+
+  async updateDepartmentMember(
+    organizationId: string,
+    departmentId: string,
+    userId: string,
+    input: { roleInDepartment?: 'MANAGER' | 'STAFF'; isActive?: boolean }
+  ): Promise<{ member: DepartmentMemberSummary }> {
+    return fetchApi<{ member: DepartmentMemberSummary }>(
+      `/organizations/${organizationId}/departments/${departmentId}/members/${userId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }
+    );
+  },
+
+  async removeDepartmentMember(
+    organizationId: string,
+    departmentId: string,
+    userId: string
+  ): Promise<void> {
+    return fetchApi<void>(
+      `/organizations/${organizationId}/departments/${departmentId}/members/${userId}`,
+      { method: 'DELETE' }
+    );
+  },
+};
