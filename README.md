@@ -80,6 +80,7 @@ CivicFix separates responsibilities into three distinct dashboard contexts:
 - **Server Framework:** Express.js
 - **Language:** TypeScript (strict mode, NodeNext module resolution)
 - **ORM:** Prisma Client v6.19.3
+- **Password Hashing:** bcryptjs (work factor 10)
 - **Architecture:** Controller-Service-Repository pattern with structured REST API endpoints
 
 ### Database & Storage
@@ -89,7 +90,7 @@ CivicFix separates responsibilities into three distinct dashboard contexts:
 
 ### Authentication & Security
 - **Authentication:** Custom JWT authentication with bcrypt password hashing *(not Supabase Auth)*
-- **Security:** CORS configuration, input sanitization, parameterized queries
+- **Security:** CORS configuration, input sanitization, parameterized queries, bcrypt password hashing
 
 ### Runtime Validation
 - **Validation:** Zod (runtime request payload validation)
@@ -160,17 +161,6 @@ erDiagram
 | 15 | `ai_analyses` | Asynchronous AI results (Intelligence, Routing, Verification) | `id` (UUID), `issue_id`, `agent_type`, `structured_result` |
 | 16 | `notifications` | In-app user notifications for issue lifecycle events | `id` (UUID), `recipient_id`, `issue_id`, `notification_type` |
 
-### 6.3 Enums
-- `user_role`: `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER`, `STAFF`, `USER`
-- `organization_type`: `UNIVERSITY`, `MUNICIPALITY`, `CORPORATION`, `RESIDENTIAL_ASSOCIATION`, `OTHER`
-- `org_member_role`: `OWNER`, `ADMIN`, `MANAGER`, `STAFF`, `MEMBER`
-- `issue_status`: `REPORTED`, `UNDER_REVIEW`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`
-- `issue_priority`: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`
-- `boundary_type`: `POLYGON`, `BOUNDING_BOX`, `RADIUS`
-- `ai_agent_type`: `ISSUE_INTELLIGENCE`, `SMART_ROUTING`, `DUPLICATE_DETECTION`, `IMAGE_VERIFICATION`
-- `ai_analysis_status`: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`
-- `notification_type`: `ISSUE_CREATED`, `ISSUE_ASSIGNED`, `STATUS_CHANGED`, `REMARK_ADDED`, `ISSUE_RESOLVED`
-
 ---
 
 ## 7. Supabase Setup & Execution Instructions
@@ -214,46 +204,84 @@ The canonical source of truth for the database architecture is [supabase/schema.
 > **Do NOT run destructive commands** such as `prisma migrate reset` or `prisma db push --force-reset`.
 > The database structure is already established via `supabase/schema.sql`. Prisma maps directly to these tables.
 
-### 8.3 Prisma Commands
-From the workspace root (`c:\Projects\CivicFix`):
+---
+
+## 9. Demo & Development Seed Data
+
+CivicFix includes an automated, **100% idempotent** database seeding script located at [backend/prisma/seed.ts](file:///c:/Projects/CivicFix/backend/prisma/seed.ts). It populates essential reference data, demo users, organization structures, and sample issues for local development.
+
+### 9.1 Password Security Rule
+**NEVER store or seed plaintext passwords.**
+All seed account passwords are dynamically hashed using `bcryptjs` (10 rounds). The script reads raw passwords from environment variables and refuses to run if any password is missing:
+
+```env
+# Required Seed Passwords (set locally in backend/.env)
+SEED_PLATFORM_ADMIN_PASSWORD=
+SEED_ORG_OWNER_PASSWORD=
+SEED_ORG_ADMIN_PASSWORD=
+SEED_MANAGER_PASSWORD=
+SEED_STAFF_PASSWORD=
+SEED_USER_PASSWORD=
+```
+
+### 9.2 How to Run the Seed
+From the workspace root:
 
 ```bash
-# Validate Prisma schema against definitions
-npm run prisma:validate
-
-# Generate Prisma Client TypeScript types
-npm run prisma:generate
-
-# Test PostgreSQL connection through Prisma
-npm run test:db
+# Execute safe idempotent database seed
+npm run db:seed
 ```
 
-### 8.4 Singleton Prisma Client
-The application exports a singleton `PrismaClient` instance from [backend/src/lib/prisma.ts](file:///c:/Projects/CivicFix/backend/src/lib/prisma.ts). During development (`tsx` watch mode), it reuses the existing client instance attached to `globalThis` to prevent connection pool exhaustion.
-
-### 8.5 Database Health Monitoring
-The health endpoint `GET /api/health` performs an active, non-blocking database ping query:
-```json
-{
-  "success": true,
-  "message": "CivicFix backend service operational",
-  "data": {
-    "status": "healthy",
-    "service": "civicfix-backend",
-    "version": "1.0.0",
-    "environment": "development",
-    "database": "connected",
-    "uptimeSeconds": 42,
-    "timestamp": "2026-09-27T11:17:27.470Z"
-  },
-  "timestamp": "2026-09-27T11:17:27.470Z"
-}
+Or from the backend directory:
+```bash
+cd backend
+npm run db:seed
 ```
-*Note: If `DATABASE_URL` is unconfigured or unreachable, `database` reports `"not_configured"` or `"disconnected"` gracefully without crashing or leaking connection credentials.*
+
+### 9.3 Demo Accounts Seeded
+
+| Role | Name | Email | Assignment / Permissions |
+|---|---|---|---|
+| `PLATFORM_ADMIN` | Platform Superadmin | `platform.admin@civicfix.demo` | Platform-wide administration across all organizations |
+| `ORG_OWNER` | SRM Administration Owner | `srm.owner@civicfix.demo` | Primary authority / owner for SRM Campus Administration |
+| `ORG_ADMIN` | SRM Operations Admin | `srm.admin@civicfix.demo` | Operational administrator managing SRM triage & workflow |
+| `MANAGER` | Civil Infrastructure Manager | `manager@civicfix.demo` | Department Head for **Civil / Infrastructure** |
+| `STAFF` | Electrical Field Technician | `staff@civicfix.demo` | Field technician for **Electrical** department |
+| `USER` | SRM Campus Student | `student@civicfix.demo` | Standard student / citizen reporter (reporting & tracking) |
+
+*Note: All demo accounts use the `@civicfix.demo` domain and do NOT represent real people.*
+
+### 9.4 Reference Data Seeded
+- **Organization:** `SRM Campus Administration` (Type: `UNIVERSITY`, slug: `srm-campus-admin`)
+- **Departments (5):**
+  1. `Civil / Infrastructure` (`CIVIL`)
+  2. `Electrical` (`ELECTRICAL`)
+  3. `Sanitation & Waste` (`SANITATION`)
+  4. `Water & Drainage` (`WATER`)
+  5. `General Maintenance` (`MAINTENANCE`)
+- **Categories (7):**
+  1. `Pothole / Road` (Priority: `HIGH`, icon: `road`)
+  2. `Streetlight` (Priority: `MEDIUM`, icon: `lightbulb`)
+  3. `Waste` (Priority: `MEDIUM`, icon: `trash`)
+  4. `Water Leakage` (Priority: `HIGH`, icon: `droplet`)
+  5. `Electrical` (Priority: `CRITICAL`, icon: `zap`)
+  6. `Infrastructure` (Priority: `MEDIUM`, icon: `building`)
+  7. `Other` (Priority: `LOW`, icon: `help-circle`)
+- **Routing Rules (7):** Deterministic database records mapping categories to departments with keyword arrays and priority orders.
+- **Service Area:** SRM Kattankulathur Campus Perimeter (`DEMO SERVICE AREA`) with bounding box (Lat 12.815–12.835, Lon 80.035–80.055) and GeoJSON polygon boundary.
+
+### 9.5 Demo Issues Seeded (3 Sample Issues)
+To test reporting, triage, and resolution workflows:
+1. `CF-SRM-2026-0001` — *"Streetlight flickering near Hostel 3 walkway"* (`IN_PROGRESS`, Category: Streetlight, Assigned to Electrical staff member with status history and triage comment).
+2. `CF-SRM-2026-0002` — *"Pothole on Main Campus Avenue near Tech Park"* (`REPORTED`, Category: Pothole / Road, High priority).
+3. `CF-SRM-2026-0003` — *"Water pipe leakage near Bio-Engineering block"* (`RESOLVED`, Category: Water Leakage, Assigned to Water & Drainage with resolution remark).
+
+### 9.6 Safe Re-Seeding (Idempotency)
+The script uses Prisma `upsert` across all entities. You can run `npm run db:seed` repeatedly during development without duplicating organizations, users, departments, or issues.
 
 ---
 
-## 9. Development Commands
+## 10. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -288,11 +316,14 @@ npm run prisma:generate
 
 # Test Database Connectivity
 npm run test:db
+
+# Run Idempotent Database Seed
+npm run db:seed
 ```
 
 ---
 
-## 10. Environment Variables Template
+## 11. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -315,6 +346,14 @@ SUPABASE_SERVICE_ROLE_KEY=
 JWT_SECRET=
 JWT_EXPIRES_IN=7d
 
+# Database Demo Seed Passwords (Required by npm run db:seed)
+SEED_PLATFORM_ADMIN_PASSWORD=
+SEED_ORG_OWNER_PASSWORD=
+SEED_ORG_ADMIN_PASSWORD=
+SEED_MANAGER_PASSWORD=
+SEED_STAFF_PASSWORD=
+SEED_USER_PASSWORD=
+
 # AI Intelligence Integrations
 GROQ_API_KEY=
 GEMINI_API_KEY=
@@ -322,14 +361,15 @@ GEMINI_API_KEY=
 
 ---
 
-## 11. Implementation Roadmap & Deferred Scope
+## 12. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
 | **Prompt 1: Project Foundation** | &check; Complete | Directory structure, Express backend, Next.js frontend, branding, health check |
 | **Prompt 2: Database Schema** | &check; Complete | Supabase PostgreSQL schema, 16 tables, 9 enums, 36 indexes, storage bucket, seed data |
 | **Prompt 3: Prisma ORM Integration** | &check; Complete | Prisma schema mapping, Client generation, singleton client, DB test script, health check |
-| **Prompt 4: Authentication & Users** | Upcoming | Custom JWT auth, bcrypt password hashing, login/register, role authorization |
-| **Prompt 5: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
-| **Prompt 6: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
-| **Prompt 7: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+| **Prompt 4: Demo Database Seed Data** | &check; Complete | Idempotent Prisma seeder, bcrypt password hashing, demo users, orgs, rules, issues |
+| **Prompt 5: Authentication & Users** | Upcoming | Custom JWT auth, bcrypt verification, login/register, cookie sessions, RBAC |
+| **Prompt 6: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
+| **Prompt 7: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
+| **Prompt 8: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
