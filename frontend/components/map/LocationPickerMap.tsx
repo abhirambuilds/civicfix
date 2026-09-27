@@ -8,19 +8,21 @@ import { OSM_TILE_URL, OSM_ATTRIBUTION, DEFAULT_MAP_ZOOM } from '@/lib/constants
 interface LocationPickerMapProps {
   latitude: number;
   longitude: number;
-  onLocationChange: (lat: number, lng: number) => void;
+  onLocationChange?: (lat: number, lng: number) => void;
   flyToTrigger?: number; // Counter incremented to trigger pan/fly animation
+  readOnly?: boolean;
 }
 
 /**
  * Creates a modern, SVG-based Leaflet DivIcon.
  * This completely avoids Next.js broken image bundling issues with default Leaflet PNG markers.
  */
-function createIssueMarkerIcon() {
+function createIssueMarkerIcon(readOnly = false) {
+  const cursorStyle = readOnly ? 'default' : 'grab';
   return L.divIcon({
     className: 'civicfix-location-marker',
     html: `
-      <div style="position: relative; width: 34px; height: 42px; display: flex; align-items: center; justify-content: center; cursor: grab;">
+      <div style="position: relative; width: 34px; height: 42px; display: flex; align-items: center; justify-content: center; cursor: ${cursorStyle};">
         <div style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 14px; height: 6px; background: rgba(0, 0, 0, 0.35); border-radius: 50%; filter: blur(1.5px);"></div>
         <svg width="34" height="42" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45));">
           <path d="M17 0C7.611 0 0 7.611 0 17C0 27.2 14.5 40.5 16.1 41.9C16.6 42.3 17.4 42.3 17.9 41.9C19.5 40.5 34 27.2 34 17C34 7.611 26.389 0 17 0Z" fill="#4F46E5"/>
@@ -37,16 +39,16 @@ function createIssueMarkerIcon() {
 }
 
 /**
- * Handles map click events to reposition the marker.
+ * Handles map click events to reposition the marker when not readOnly.
  */
 function MapClickHandler({
   onLocationChange,
 }: {
-  onLocationChange: (lat: number, lng: number) => void;
+  onLocationChange?: (lat: number, lng: number) => void;
 }) {
   useMapEvents({
     click(e) {
-      onLocationChange(e.latlng.lat, e.latlng.lng);
+      onLocationChange?.(e.latlng.lat, e.latlng.lng);
     },
   });
   return null;
@@ -84,22 +86,24 @@ export default function LocationPickerMap({
   longitude,
   onLocationChange,
   flyToTrigger,
+  readOnly = false,
 }: LocationPickerMapProps) {
   const markerRef = useRef<L.Marker | null>(null);
-  const markerIcon = useMemo(() => createIssueMarkerIcon(), []);
+  const markerIcon = useMemo(() => createIssueMarkerIcon(readOnly), [readOnly]);
 
-  // Event handlers for dragging the marker
+  // Event handlers for dragging the marker (disabled in readOnly)
   const markerEventHandlers = useMemo(
     () => ({
       dragend() {
+        if (readOnly) return;
         const marker = markerRef.current;
-        if (marker) {
+        if (marker && onLocationChange) {
           const latlng = marker.getLatLng();
           onLocationChange(latlng.lat, latlng.lng);
         }
       },
     }),
-    [onLocationChange]
+    [onLocationChange, readOnly]
   );
 
   return (
@@ -108,7 +112,7 @@ export default function LocationPickerMap({
         center={[latitude, longitude]}
         zoom={DEFAULT_MAP_ZOOM}
         scrollWheelZoom={true}
-        className="w-full h-full min-h-[360px] z-10"
+        className="w-full h-full min-h-[220px] z-10"
         attributionControl={true}
       >
         {/* OpenStreetMap Tile Layer with HTTPS and mandatory attribution */}
@@ -118,8 +122,10 @@ export default function LocationPickerMap({
           maxZoom={19}
         />
 
-        {/* Map Click Listener */}
-        <MapClickHandler onLocationChange={onLocationChange} />
+        {/* Map Click Listener (Disabled in readOnly mode) */}
+        {!readOnly && onLocationChange && (
+          <MapClickHandler onLocationChange={onLocationChange} />
+        )}
 
         {/* Animated Map Panner */}
         <MapViewController
@@ -128,14 +134,14 @@ export default function LocationPickerMap({
           flyToTrigger={flyToTrigger}
         />
 
-        {/* Draggable Issue Location Marker */}
+        {/* Issue Location Marker */}
         <Marker
           position={[latitude, longitude]}
-          draggable={true}
-          eventHandlers={markerEventHandlers}
+          draggable={!readOnly}
+          eventHandlers={!readOnly ? markerEventHandlers : undefined}
           ref={markerRef}
           icon={markerIcon}
-          title="Drag pin to adjust issue location"
+          title={readOnly ? 'Reported defect location' : 'Drag pin to adjust issue location'}
           alt="Selected issue location marker"
         />
       </MapContainer>

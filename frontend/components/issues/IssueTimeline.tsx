@@ -1,6 +1,13 @@
+'use client';
+
 import React from 'react';
 import { IssueStatus, IssueStatusHistory } from '@/types';
-import { IconCheckCircle } from '@/components/ui/Icons';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import {
+  IconCheckCircle,
+  IconClock,
+  IconCalendar,
+} from '@/components/ui/Icons';
 
 interface IssueTimelineProps {
   currentStatus: IssueStatus;
@@ -8,41 +15,13 @@ interface IssueTimelineProps {
   createdAt?: string;
 }
 
-const LIFECYCLE_STEPS: Array<{
-  status: IssueStatus;
-  label: string;
-  description: string;
-}> = [
-  {
-    status: 'REPORTED',
-    label: 'Reported',
-    description: 'Submitted by citizen/student',
-  },
-  {
-    status: 'UNDER_REVIEW',
-    label: 'Under Review',
-    description: 'Triage by organization admin',
-  },
-  {
-    status: 'ASSIGNED',
-    label: 'Assigned',
-    description: 'Assigned to maintenance department',
-  },
-  {
-    status: 'IN_PROGRESS',
-    label: 'In Progress',
-    description: 'Active on-site inspection or repair',
-  },
-  {
-    status: 'RESOLVED',
-    label: 'Resolved',
-    description: 'Remediation completed & documented',
-  },
-  {
-    status: 'CLOSED',
-    label: 'Closed',
-    description: 'Administrative verification & closure',
-  },
+const LIFECYCLE_ORDER: IssueStatus[] = [
+  'REPORTED',
+  'UNDER_REVIEW',
+  'ASSIGNED',
+  'IN_PROGRESS',
+  'RESOLVED',
+  'CLOSED',
 ];
 
 export function IssueTimeline({
@@ -50,115 +29,158 @@ export function IssueTimeline({
   statusHistory = [],
   createdAt,
 }: IssueTimelineProps) {
-  const currentIndex = LIFECYCLE_STEPS.findIndex((s) => s.status === currentStatus);
+  // Sort history chronologically (oldest first)
+  const sortedHistory = [...statusHistory].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
 
-  // Map events from status history
-  const historyMap = new Map<IssueStatus, IssueStatusHistory>();
-  statusHistory.forEach((h) => {
-    historyMap.set(h.newStatus, h);
-  });
+  // If statusHistory is empty, construct synthetic initial event from createdAt
+  const displayEvents =
+    sortedHistory.length > 0
+      ? sortedHistory
+      : [
+          {
+            id: 'initial-reported',
+            newStatus: 'REPORTED' as IssueStatus,
+            previousStatus: null,
+            remark: 'Report submitted by citizen.',
+            createdAt: createdAt || new Date().toISOString(),
+            changedBy: null,
+          },
+        ];
+
+  const currentStepIndex = LIFECYCLE_ORDER.indexOf(currentStatus);
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-sm">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-4 flex items-center justify-between">
-        <span>Lifecycle Status Timeline</span>
-        <span className="text-xs font-normal text-slate-400 capitalize">
-          Current: <strong className="text-white font-medium">{currentStatus.replace('_', ' ')}</strong>
-        </span>
-      </h3>
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6 backdrop-blur-sm space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-800/80">
+        <div>
+          <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+            <IconClock size={16} className="text-indigo-400" />
+            <span>Status &amp; Lifecycle Timeline</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Audit history tracking progress from Reported &rarr; Resolution
+          </p>
+        </div>
 
-      <ol className="relative border-l border-slate-800 ml-3.5 space-y-6" role="list">
-        {LIFECYCLE_STEPS.map((step, index) => {
-          const isCompleted = index < currentIndex;
-          const isCurrent = index === currentIndex;
+        <StatusBadge status={currentStatus} size="sm" />
+      </div>
 
-          const historyEntry = historyMap.get(step.status);
-          const timestamp =
-            historyEntry?.createdAt || (step.status === 'REPORTED' ? createdAt : null);
+      {/* Mini Lifecycle Progress Bar */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium px-1">
+          <span>Lifecycle Stage</span>
+          <span className="text-indigo-300 font-semibold capitalize">
+            {currentStatus.replace('_', ' ').toLowerCase()} ({Math.min(currentStepIndex + 1, 6)}/6)
+          </span>
+        </div>
 
-          const formattedDate = timestamp
-            ? new Date(timestamp).toLocaleString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-              })
-            : null;
+        <div className="grid grid-cols-6 gap-1.5 h-2 rounded-full overflow-hidden bg-slate-950 p-0.5 border border-slate-800">
+          {LIFECYCLE_ORDER.map((stage, idx) => {
+            const isCompleted = idx <= currentStepIndex;
+            const isCurrent = idx === currentStepIndex;
 
-          return (
-            <li
-              key={step.status}
-              className="ml-6 relative"
-              aria-current={isCurrent ? 'step' : undefined}
-            >
-              {/* Timeline Node Indicator */}
+            return (
               <div
-                className={`absolute -left-[35px] top-0.5 w-6 h-6 rounded-full flex items-center justify-center border transition-all ${
-                  isCompleted
-                    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400'
-                    : isCurrent
-                    ? 'bg-indigo-500/20 border-indigo-400 text-indigo-300 shadow-sm shadow-indigo-500/30'
-                    : 'bg-slate-900 border-slate-800 text-slate-600'
+                key={stage}
+                title={stage.replace('_', ' ')}
+                className={`rounded-full transition-all duration-300 ${
+                  isCurrent
+                    ? 'bg-indigo-500 animate-pulse'
+                    : isCompleted
+                    ? 'bg-emerald-500/80'
+                    : 'bg-slate-800/60'
                 }`}
-              >
-                {isCompleted ? (
-                  <IconCheckCircle size={14} />
-                ) : isCurrent ? (
-                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse" />
-                ) : (
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-700" />
-                )}
-              </div>
+              />
+            );
+          })}
+        </div>
+      </div>
 
-              {/* Step Content */}
-              <div className="flex flex-col">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span
-                    className={`text-sm font-semibold ${
-                      isCompleted
-                        ? 'text-slate-200'
-                        : isCurrent
-                        ? 'text-indigo-300 font-bold'
-                        : 'text-slate-400'
-                    }`}
-                  >
-                    {step.label}
-                  </span>
+      {/* Actual Chronological Events Log */}
+      <div className="space-y-4 pt-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Recorded Audit Transitions ({displayEvents.length})
+        </h4>
 
-                  {isCurrent && (
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                      Active State
-                    </span>
-                  )}
+        <ol className="relative border-l border-slate-800 ml-3.5 space-y-6" role="list">
+          {displayEvents.map((event, index) => {
+            const isLatest = index === displayEvents.length - 1;
+            const formattedDate = new Date(event.createdAt).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            });
+            const formattedTime = new Date(event.createdAt).toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+            });
 
-                  {formattedDate && (
-                    <span className="text-xs text-slate-400 ml-auto">
-                      {formattedDate}
-                    </span>
+            return (
+              <li key={event.id || index} className="ml-6 relative">
+                {/* Node marker */}
+                <div
+                  className={`absolute -left-[35px] top-0.5 w-6 h-6 rounded-full flex items-center justify-center border transition-all ${
+                    isLatest
+                      ? 'bg-indigo-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30'
+                      : 'bg-slate-900 border-slate-700 text-emerald-400'
+                  }`}
+                  aria-hidden="true"
+                >
+                  {isLatest ? (
+                    <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                  ) : (
+                    <IconCheckCircle size={13} />
                   )}
                 </div>
 
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {step.description}
-                </p>
+                {/* Event Details */}
+                <div className="flex flex-col space-y-1.5 p-3 rounded-xl border border-slate-800/80 bg-slate-950/50">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={event.newStatus} size="sm" />
+                      {isLatest && (
+                        <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                          Current Stage
+                        </span>
+                      )}
+                    </div>
 
-                {/* Audit Remark if present */}
-                {historyEntry?.remark && (
-                  <div className="mt-2 text-xs p-2.5 rounded-md bg-slate-950/60 border border-slate-800/80 text-slate-300">
-                    <span className="text-slate-400 font-medium">Official Remark: </span>
-                    <span>&ldquo;{historyEntry.remark}&rdquo;</span>
-                    {historyEntry.changedBy?.name && (
-                      <span className="block text-[10px] text-slate-400 mt-1">
-                        Recorded by: {historyEntry.changedBy.name} ({historyEntry.changedBy.role})
-                      </span>
-                    )}
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
+                      <IconCalendar size={12} className="text-slate-400" />
+                      <span>{formattedDate}, {formattedTime}</span>
+                    </div>
                   </div>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+
+                  {/* Optional Transition Remark */}
+                  {event.remark && (
+                    <p className="text-xs text-slate-300 leading-relaxed pt-1">
+                      <span className="text-slate-400 font-medium">Note: </span>
+                      &ldquo;{event.remark}&rdquo;
+                    </p>
+                  )}
+
+                  {/* Actor information if safely exposed */}
+                  {event.changedBy?.name && (
+                    <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-800/60 flex items-center justify-between">
+                      <span>
+                        Action logged by: <strong className="text-slate-300">{event.changedBy.name}</strong>
+                      </span>
+                      {event.changedBy.role && (
+                        <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                          {event.changedBy.role}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </div>
   );
 }

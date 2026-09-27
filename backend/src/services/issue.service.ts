@@ -1128,6 +1128,7 @@ export async function listIssues(
   }
   if (search && search.trim() !== '') {
     where.OR = [
+      { issueNumber: { contains: search.trim(), mode: 'insensitive' } },
       { title: { contains: search.trim(), mode: 'insensitive' } },
       { description: { contains: search.trim(), mode: 'insensitive' } },
     ];
@@ -1241,7 +1242,10 @@ export async function listIssues(
   if (search && search.trim() !== '') {
     const s = search.toLowerCase();
     filtered = filtered.filter(
-      (i) => i.title.toLowerCase().includes(s) || i.description.toLowerCase().includes(s)
+      (i) =>
+        i.issueNumber.toLowerCase().includes(s) ||
+        i.title.toLowerCase().includes(s) ||
+        i.description.toLowerCase().includes(s)
     );
   }
 

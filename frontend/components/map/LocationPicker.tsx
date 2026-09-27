@@ -26,6 +26,7 @@ export interface LocationPickerProps {
   onChange?: (coords: Coordinates) => void;
   className?: string;
   height?: string;
+  readOnly?: boolean;
 }
 
 export function LocationPicker({
@@ -33,6 +34,7 @@ export function LocationPicker({
   onChange,
   className = '',
   height = 'h-[380px]',
+  readOnly = false,
 }: LocationPickerProps) {
   // Use passed value or fallback to seeded campus default
   const [coords, setCoords] = useState<Coordinates>(
@@ -57,6 +59,7 @@ export function LocationPicker({
   // Handler for marker dragging or map clicking
   const handleLocationChange = useCallback(
     (lat: number, lng: number) => {
+      if (readOnly) return;
       const updated: Coordinates = {
         latitude: Number(lat.toFixed(6)),
         longitude: Number(lng.toFixed(6)),
@@ -66,11 +69,12 @@ export function LocationPicker({
       setGpsError(null);
       onChange?.(updated);
     },
-    [onChange]
+    [onChange, readOnly]
   );
 
   // Handler for "Use My Current Location" button
   const handleUseCurrentLocation = () => {
+    if (readOnly) return;
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setGpsError(
         'Your browser does not support location detection. Please select the location manually on the map.'
@@ -125,6 +129,7 @@ export function LocationPicker({
 
   // Reset to SRM campus default center
   const handleResetToCampus = () => {
+    if (readOnly) return;
     setCoords(DEFAULT_CAMPUS_LOCATION);
     setLocationSource('DEFAULT');
     setGpsError(null);
@@ -139,7 +144,7 @@ export function LocationPicker({
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
             <IconMapPin size={15} className="text-indigo-400 shrink-0" />
-            <span>Selected Coordinates</span>
+            <span>{readOnly ? 'Reported Coordinates' : 'Selected Coordinates'}</span>
           </span>
 
           {/* Coordinate Pills */}
@@ -149,61 +154,72 @@ export function LocationPicker({
             <span>Lng: {coords.longitude.toFixed(6)}</span>
           </div>
 
-          {/* Location Source Indicator */}
-          {locationSource === 'DEFAULT' && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              <span>Default Campus Center</span>
-            </span>
-          )}
-
-          {locationSource === 'GPS' && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>GPS Location Acquired</span>
-            </span>
-          )}
-
-          {locationSource === 'MANUAL' && (
+          {/* Location Source / State Indicator */}
+          {readOnly ? (
             <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
               <IconCheckCircle size={12} className="text-indigo-400" />
-              <span>Pinned on Map</span>
+              <span>Reported Location Pin</span>
             </span>
+          ) : (
+            <>
+              {locationSource === 'DEFAULT' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span>Default Campus Center</span>
+                </span>
+              )}
+
+              {locationSource === 'GPS' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>GPS Location Acquired</span>
+                </span>
+              )}
+
+              {locationSource === 'MANUAL' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                  <IconCheckCircle size={12} className="text-indigo-400" />
+                  <span>Pinned on Map</span>
+                </span>
+              )}
+            </>
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          {locationSource !== 'DEFAULT' && (
+        {/* Action Buttons (Hidden when readOnly) */}
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            {locationSource !== 'DEFAULT' && (
+              <button
+                type="button"
+                onClick={handleResetToCampus}
+                className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                title="Reset center to SRM Campus"
+              >
+                <IconRefresh size={13} />
+                <span className="hidden sm:inline">Reset Campus</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={handleResetToCampus}
-              className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors"
-              title="Reset center to SRM Campus"
+              onClick={handleUseCurrentLocation}
+              disabled={isGpsLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
+              aria-label="Use My Current Location via browser GPS"
             >
-              <IconRefresh size={13} />
-              <span className="hidden sm:inline">Reset Campus</span>
+              <IconCrosshair
+                size={14}
+                className={isGpsLoading ? 'animate-spin' : ''}
+              />
+              <span>{isGpsLoading ? 'Detecting GPS...' : 'Use My Current Location'}</span>
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={handleUseCurrentLocation}
-            disabled={isGpsLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
-            aria-label="Use My Current Location via browser GPS"
-          >
-            <IconCrosshair
-              size={14}
-              className={isGpsLoading ? 'animate-spin' : ''}
-            />
-            <span>{isGpsLoading ? 'Detecting GPS...' : 'Use My Current Location'}</span>
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Geolocation Error Alert */}
-      {gpsError && (
+      {!readOnly && gpsError && (
         <div
           role="alert"
           className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs flex items-center justify-between gap-3 animate-in fade-in"
@@ -223,23 +239,26 @@ export function LocationPicker({
         </div>
       )}
 
-      {/* Interactive Map Container */}
+      {/* Interactive / ReadOnly Map Container */}
       <div className={`relative w-full ${height}`}>
         <LocationPickerMap
           latitude={coords.latitude}
           longitude={coords.longitude}
           onLocationChange={handleLocationChange}
           flyToTrigger={flyToTrigger}
+          readOnly={readOnly}
         />
       </div>
 
       {/* Helpful Instructions Footer */}
       <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1">
         <p>
-          Drag the pin or click/tap anywhere on the map to position the issue marker accurately.
+          {readOnly
+            ? 'Reported location of defect on OpenStreetMap.'
+            : 'Drag the pin or click/tap anywhere on the map to position the issue marker accurately.'}
         </p>
         <p className="text-slate-500">
-          Powered by OpenStreetMap &bull; No API Key Required
+          Powered by OpenStreetMap &bull; {readOnly ? 'Read-only View' : 'No API Key Required'}
         </p>
       </div>
     </div>

@@ -2,7 +2,7 @@ import React from 'react';
 import { IssuePriority } from '@/types';
 
 interface PriorityBadgeProps {
-  priority: IssuePriority;
+  priority?: IssuePriority | null;
   size?: 'sm' | 'md';
 }
 
@@ -37,6 +37,23 @@ const PRIORITY_CONFIG: Record<
 };
 
 export function PriorityBadge({ priority, size = 'md' }: PriorityBadgeProps) {
+  const sizeClasses = {
+    sm: 'text-[10px] px-1.5 py-0.5 gap-1',
+    md: 'text-xs px-2 py-0.5 gap-1.5',
+  }[size];
+
+  if (!priority) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-md border border-slate-700/60 bg-slate-800/40 text-slate-400 ${sizeClasses} whitespace-nowrap`}
+        aria-label="Priority: Pending Triage"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-500" aria-hidden="true" />
+        <span>Pending Triage</span>
+      </span>
+    );
+  }
+
   const config = PRIORITY_CONFIG[priority] || {
     label: priority,
     badgeClass: 'bg-slate-800 text-slate-300 border-slate-700',
@@ -44,10 +61,6 @@ export function PriorityBadge({ priority, size = 'md' }: PriorityBadgeProps) {
     barClass: 'bg-slate-400',
   };
 
-  const sizeClasses = {
-    sm: 'text-[10px] px-1.5 py-0.5 gap-1',
-    md: 'text-xs px-2 py-0.5 gap-1.5',
-  }[size];
 
   return (
     <span

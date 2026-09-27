@@ -193,7 +193,7 @@ export default function MyIssuesPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by issue title or description..."
+              placeholder="Search your issues..."
               className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
               aria-label="Search issues"
             />
@@ -290,8 +290,8 @@ export default function MyIssuesPage() {
             <h3 className="text-base font-bold text-white">No issues found</h3>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
               {debouncedSearch || selectedStatus !== 'ALL' || selectedCategory !== 'ALL'
-                ? 'No reported issues match your active search and filter criteria.'
-                : "You haven't reported any civic issues yet."}
+                ? 'No issues match your search.'
+                : "You haven't reported any issues yet."}
             </p>
           </div>
           {debouncedSearch || selectedStatus !== 'ALL' || selectedCategory !== 'ALL' ? (
