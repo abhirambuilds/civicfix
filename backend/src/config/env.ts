@@ -13,6 +13,8 @@ export interface AppConfig {
   directUrl: string;
   jwtSecret: string;
   jwtExpiresIn: string;
+  supabaseUrl: string;
+  supabaseServiceRoleKey: string;
 }
 
 export const config: AppConfig = {
@@ -23,4 +25,6 @@ export const config: AppConfig = {
   directUrl: process.env.DIRECT_URL || '',
   jwtSecret: process.env.JWT_SECRET || 'civicfix-dev-jwt-secret-do-not-use-in-production-change-in-env',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  supabaseUrl: process.env.SUPABASE_URL || '',
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
 };

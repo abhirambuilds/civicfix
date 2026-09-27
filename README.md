@@ -940,7 +940,100 @@ Authorities can adjust priority levels (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`):
 
 ---
 
-## 16. Development Commands
+## 16. Supabase Storage & Issue Image Upload
+
+CivicFix allows citizens and authorized staff to attach photographic evidence to civic issue reports. Files are stored in a **private** Supabase Storage bucket (`issue-images`), while metadata is persisted in the PostgreSQL `IssueImage` table.
+
+```
+Citizen / Staff (Multipart Form Data)
+                 │
+                 ▼
+      [Authentication & RBAC]
+                 │ (Verifies ownership/assignment & issue access)
+                 ▼
+  [MIME & Magic-Byte Validation]
+  (JPEG / PNG / WebP, 5 MB limit, max 5 images/issue)
+                 │
+                 ▼
+     [Generate Safe Storage Path]
+  (issues/{issueId}/{uuid}-{sanitizedFilename})
+                 │
+                 ▼
+      [Supabase Storage Client]
+  (Upload to private 'issue-images' bucket)
+                 │
+                 ├──────────────────────────────┐
+                 ▼ (Success)                    ▼ (Failure)
+       [Prisma IssueImage Insert]        [Abort / 500 Error]
+                 │
+                 ├──────────────────────────────┐
+                 ▼ (Success)                    ▼ (DB Insert Failure)
+        [201 Created Response]         [Atomic Cleanup: Delete Object]
+      (Metadata + Short-Lived URL)       (Prevent Orphaned Storage Objects)
+```
+
+### 16.1 Storage Bucket & Security Architecture
+
+1. **Private Bucket (`issue-images`):** The bucket is private. Direct unauthenticated public access to storage object URLs is disabled.
+2. **Server-Side Supabase Client (`backend/src/lib/supabase.ts`):** All storage operations (upload, signed URL generation, deletion) are orchestrated server-side via the Supabase Service Role key (`SUPABASE_SERVICE_ROLE_KEY`).
+3. **No Frontend Key Exposure:** Neither `SUPABASE_SERVICE_ROLE_KEY` nor internal storage credentials are ever sent to or exposed in the frontend.
+4. **Offline / Mock Storage Fallback:** When `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are not configured locally, backend services switch to an isolated, safe in-memory mock storage repository to allow 100% offline verification and unit testing without network dependencies.
+
+### 16.2 Manual Supabase Setup Instructions
+
+> [!IMPORTANT]
+> The Supabase Storage bucket must be configured manually in your Supabase project dashboard. CivicFix will not auto-create the bucket. Follow these steps:
+
+1. Log into your [Supabase Dashboard](https://app.supabase.com) and select your project.
+2. Navigate to the **Storage** section in the left sidebar.
+3. Click **New bucket**.
+4. Name the bucket: `issue-images`.
+5. Ensure the **Public bucket** toggle is **OFF (Private)**.
+6. Click **Save**.
+7. If needed, review or configure Storage RLS policies. Since CivicFix interacts with Supabase Storage exclusively via the server-side Service Role key, backend operations bypass client-side RLS policies.
+8. Copy your **Project URL** and **service_role (secret)** key from **Project Settings &rarr; API**.
+9. Add them to your local `backend/.env` file:
+   ```env
+   SUPABASE_URL=https://<your-project-id>.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=<your-service-role-secret-key>
+   ```
+10. **NEVER** expose the service role key to the frontend or version control.
+
+### 16.3 Upload Safeguards & Image Validation
+
+| Guard | Enforcement | Behavior on Violation |
+|---|---|---|
+| **Authentication & RBAC** | `requireAuth` + Issue Ownership Check | `401 Unauthorized` / `403 Forbidden` |
+| **Cross-Issue Upload** | User must own issue or belong to handling org | `403 Forbidden` |
+| **Supported File Types** | `image/jpeg`, `image/png`, `image/webp` | `400 Bad Request` |
+| **Magic-Byte Verification** | Hex signature check (`FF D8 FF`, `89 50 4E 47`, `RIFF...WEBP`) | `400 Bad Request` (Blocks MIME spoofing) |
+| **File Size Limit** | Max 5 MB per image | `413 Payload Too Large` |
+| **Image Count Limit** | Max 5 images per issue | `400 Bad Request` |
+| **Path Traversal Guard** | Strips `../` and special characters; enforces structured UUID prefix | Neutralized at path generator |
+| **Partial Failure Rollback** | Deletes uploaded storage object if DB metadata insert fails | Prevents orphaned storage files |
+
+### 16.4 Short-Lived Signed URLs & Deletion
+
+- **Signed URLs (`15-minute / 900-second expiration`):** Because the storage bucket is private, image listings and dedicated URL endpoints return time-limited signed URLs generated on-demand by the backend.
+- **Cross-Issue Access Guard:** Requesting an image URL under an unrelated issue (e.g., Image from Issue A under Issue B) returns `404 Not Found`.
+- **Image Deletion (`DELETE /api/issues/:issueId/images/:imageId`):**
+  - The citizen reporter can delete their own uploaded images.
+  - Organization administrators (`ORG_ADMIN`, `ORG_OWNER`, `PLATFORM_ADMIN`) can delete images for moderation.
+  - Operational `STAFF` are restricted from arbitrary deletion (`403 Forbidden`).
+  - Storage deletion and DB deletion are orchestrated atomically.
+
+### 16.5 Image Storage REST API Endpoints
+
+| Method | Endpoint | Authorized Roles | Description |
+|---|---|---|---|
+| `POST` | `/api/issues/:issueId/images` | Issue owner, handling org staff/admins | Upload image (`multipart/form-data`, field: `image`, max 5 MB) |
+| `GET` | `/api/issues/:issueId/images` | Issue owner, handling org staff/admins | List issue images with metadata and short-lived signed URLs |
+| `GET` | `/api/issues/:issueId/images/:imageId/url` | Issue owner, handling org staff/admins | Retrieve a fresh 15-minute signed URL for preview/download |
+| `DELETE` | `/api/issues/:issueId/images/:imageId` | Issue owner, `ORG_ADMIN`, `ORG_OWNER`, `PLATFORM_ADMIN` | Delete image from storage and remove metadata record |
+
+---
+
+## 17. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -988,6 +1081,9 @@ npm run test:dept
 # Run Automated Core Civic Issue & Workflow Tests (128 assertions)
 npm run test:issue
 
+# Run Automated Supabase Storage & Image Upload Tests (39 assertions)
+npm run test:storage
+
 # Test Database Connectivity
 npm run test:db
 
@@ -997,7 +1093,7 @@ npm run db:seed
 
 ---
 
-## 17. Environment Variables Template
+## 18. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -1035,7 +1131,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 18. Implementation Roadmap & Deferred Scope
+## 19. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -1049,9 +1145,10 @@ GEMINI_API_KEY=
 | **Prompt 8: Organization Departments & Staff Management** | &check; Complete | Department CRUD, active status lifecycle, department staff rosters, manager boundaries, cross-org/cross-dept isolation |
 | **Prompt 9: Core Civic Issue APIs** | &check; Complete | Issue creation, atomic location/history transaction, ownership scoping, IDOR protection, comments, categories, filtering & pagination |
 | **Prompt 10: Assignment & Status Workflow** | &check; Complete | Complete workflow lifecycle, state machine validation, department & staff assignment, auto-transition, priority management, resolution, status/assignment audit history |
-| **Prompt 11: Supabase Storage & Image Upload** | Upcoming | Multipart image uploads, Supabase Storage integration, photo evidence metadata |
+| **Prompt 11: Supabase Storage & Image Upload** | &check; Complete | Multipart image uploads, private bucket (`issue-images`), magic-byte validation, short-lived signed URLs, deletion & rollback |
 | **Prompt 12: AI Intelligence & Smart Routing** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
 | **Prompt 13: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+
 
 
 

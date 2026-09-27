@@ -23,6 +23,14 @@ import {
   resolveIssueSchema,
 } from '../validators/issue.validator.js';
 
+import {
+  uploadImageHandler,
+  listImagesHandler,
+  getSignedUrlHandler,
+  deleteImageHandler,
+} from '../controllers/image.controller.js';
+import { handleImageUpload } from '../middleware/upload.middleware.js';
+
 const issueRouter = Router();
 
 // All issue endpoints require valid Bearer token authentication
@@ -45,6 +53,30 @@ issueRouter.get('/', listIssuesHandler);
  * Retrieve single issue details with verified authorization
  */
 issueRouter.get('/:issueId', getIssueHandler);
+
+/**
+ * POST /api/issues/:issueId/images
+ * Upload an image attachment to an issue (multipart/form-data, field: "image")
+ */
+issueRouter.post('/:issueId/images', handleImageUpload, uploadImageHandler);
+
+/**
+ * GET /api/issues/:issueId/images
+ * List all images attached to an issue with signed URLs
+ */
+issueRouter.get('/:issueId/images', listImagesHandler);
+
+/**
+ * GET /api/issues/:issueId/images/:imageId/url
+ * Retrieve a fresh short-lived signed URL for an image
+ */
+issueRouter.get('/:issueId/images/:imageId/url', getSignedUrlHandler);
+
+/**
+ * DELETE /api/issues/:issueId/images/:imageId
+ * Delete an image attachment and remove its storage object
+ */
+issueRouter.delete('/:issueId/images/:imageId', deleteImageHandler);
 
 /**
  * PATCH /api/issues/:issueId/status
