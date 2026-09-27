@@ -12,6 +12,7 @@ import {
   getAssignmentsHandler,
   getStatusHistoryHandler,
   getIssueAiAnalysisHandler,
+  getIssueAiRoutingHandler,
 } from '../controllers/issue.controller.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { validate } from '../validators/validate.middleware.js';
@@ -60,6 +61,12 @@ issueRouter.get('/:issueId', getIssueHandler);
  * Retrieve the latest safe AI Issue Intelligence result.
  */
 issueRouter.get('/:issueId/ai-analysis', getIssueAiAnalysisHandler);
+
+/**
+ * GET /api/issues/:issueId/ai-routing
+ * Retrieve the latest validated Smart Routing recommendation.
+ */
+issueRouter.get('/:issueId/ai-routing', getIssueAiRoutingHandler);
 
 /**
  * POST /api/issues/:issueId/images

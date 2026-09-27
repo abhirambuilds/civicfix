@@ -18,6 +18,7 @@ import { ImagePreviewModal } from '@/components/issues/ImagePreviewModal';
 import { OrgIssueWorkflow } from '@/components/issues/OrgIssueWorkflow';
 import { LocationPicker } from '@/components/map/LocationPicker';
 import { AIIntelligenceCard } from '@/components/issues/AIIntelligenceCard';
+import { AISmartRoutingCard } from '@/components/issues/AISmartRoutingCard';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
   IconChevronLeft,
@@ -403,6 +404,7 @@ export default function OrgIssueDetailsPage() {
           </div>
 
           <AIIntelligenceCard issueId={issue.id} />
+          <AISmartRoutingCard issueId={issue.id} />
 
           {/* Attached Photos Gallery */}
           <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm space-y-4">

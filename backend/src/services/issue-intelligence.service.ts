@@ -93,7 +93,7 @@ function toPublic(record: StoredAnalysis): PublicIssueIntelligenceRecord {
   return safe;
 }
 
-function extractProviderJson(payload: unknown): unknown {
+export function parseGroqJson(payload: unknown): unknown {
   if (typeof payload === 'string') {
     const unfenced = payload.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
     return JSON.parse(unfenced);
@@ -101,7 +101,7 @@ function extractProviderJson(payload: unknown): unknown {
 
   if (payload && typeof payload === 'object' && 'choices' in payload) {
     const content = (payload as { choices?: Array<{ message?: { content?: unknown } }> }).choices?.[0]?.message?.content;
-    return extractProviderJson(content);
+    return parseGroqJson(content);
   }
 
   return payload;
@@ -121,7 +121,7 @@ function buildPrompt(context: IssueIntelligenceContext): string {
   ].join('\n');
 }
 
-async function callGroq(prompt: string, signal: AbortSignal): Promise<unknown> {
+export async function callGroqJson(prompt: string, signal: AbortSignal): Promise<unknown> {
   if (!config.groqApiKey) {
     throw new Error('AI provider is not configured.');
   }
@@ -257,13 +257,13 @@ export async function runIssueIntelligenceAnalysis(context: IssueIntelligenceCon
   record.updatedAt = nowIso();
   await updateAnalysis(record);
 
-  const provider = providerOverride || callGroq;
+  const provider = providerOverride || callGroqJson;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ISSUE_INTELLIGENCE_TIMEOUT_MS);
 
   try {
     const raw = await provider(buildPrompt(context), controller.signal);
-    const structured = issueIntelligenceSchema.parse(extractProviderJson(raw));
+    const structured = issueIntelligenceSchema.parse(parseGroqJson(raw));
     record.status = 'COMPLETED';
     record.confidence = structured.confidence;
     record.structuredResult = structured;
@@ -286,6 +286,42 @@ export async function runIssueIntelligenceAnalysis(context: IssueIntelligenceCon
 
 export function enqueueIssueIntelligenceAnalysis(context: IssueIntelligenceContext): void {
   void runIssueIntelligenceAnalysis(context).catch(() => undefined);
+}
+
+/**
+ * Internal enrichment hook for downstream agents. It never performs authorization
+ * and returns only a validated completed result, so Smart Routing can remain
+ * independent when Agent 1 is unavailable.
+ */
+export async function getCompletedIssueIntelligence(issueId: string): Promise<IssueIntelligenceResult | null> {
+  let record: StoredAnalysis | null = fallbackAnalyses.get(issueId) || null;
+  if (!record && hasDbUrl()) {
+    try {
+      const saved = await prisma.aiAnalysis.findFirst({
+        where: { issueId, agentType: AiAgentType.ISSUE_INTELLIGENCE, status: AiAnalysisStatus.COMPLETED },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (saved) {
+        record = {
+          id: saved.id,
+          issueId: saved.issueId,
+          agentType: 'ISSUE_INTELLIGENCE',
+          status: saved.status,
+          modelProvider: saved.modelProvider,
+          modelName: saved.modelName,
+          confidence: saved.confidence === null ? null : Number(saved.confidence),
+          structuredResult: issueIntelligenceSchema.safeParse(saved.structuredResult).data || null,
+          createdAt: saved.createdAt.toISOString(),
+          updatedAt: (saved as { updatedAt?: Date }).updatedAt?.toISOString() || saved.createdAt.toISOString(),
+          completedAt: saved.completedAt?.toISOString() || null,
+          errorMessage: saved.errorMessage,
+        };
+      }
+    } catch {
+      return null;
+    }
+  }
+  return record?.status === 'COMPLETED' ? record.structuredResult : null;
 }
 
 export async function getIssueIntelligenceForIssue(

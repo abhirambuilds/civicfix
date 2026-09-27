@@ -26,6 +26,7 @@ import {
   AnalyticsTimeRange,
   OrganizationAnalyticsData,
   IssueAiAnalysisResponse,
+  IssueAiRoutingResponse,
 } from '@/types';
 
 export const API_BASE_URL =
@@ -281,6 +282,13 @@ export const issuesApi = {
    */
   async getAiAnalysis(issueId: string): Promise<IssueAiAnalysisResponse> {
     return fetchApi<IssueAiAnalysisResponse>(`/issues/${issueId}/ai-analysis`);
+  },
+
+  /**
+   * Retrieve the latest validated Smart Routing recommendation.
+   */
+  async getAiRouting(issueId: string): Promise<IssueAiRoutingResponse> {
+    return fetchApi<IssueAiRoutingResponse>(`/issues/${issueId}/ai-routing`);
   },
 
   /**

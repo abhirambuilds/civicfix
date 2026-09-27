@@ -24,6 +24,7 @@ import {
 import { checkUserOrgMembership } from './organization.service.js';
 import { registerFallbackIssue } from './image.service.js';
 import { enqueueIssueIntelligenceAnalysis } from './issue-intelligence.service.js';
+import { enqueueSmartRoutingAnalysis } from './smart-routing.service.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -744,6 +745,17 @@ export async function createIssue(
         address: createdIssue.location?.address,
         landmark: createdIssue.location?.landmark,
       });
+      enqueueSmartRoutingAnalysis({
+        issueId: createdIssue.id,
+        organizationId: createdIssue.organization.id,
+        organizationName: createdIssue.organization.name,
+        title: createdIssue.title,
+        description: createdIssue.description,
+        categoryId: createdIssue.category.id,
+        category: createdIssue.category.name,
+        address: createdIssue.location?.address,
+        landmark: createdIssue.location?.landmark,
+      });
       return result;
     } catch {
       // If DB failed, fallback to in-memory creation
@@ -838,6 +850,17 @@ export async function createIssue(
     issueId: newId,
     title: input.title,
     description: input.description,
+    category: category.name,
+    address,
+    landmark,
+  });
+  enqueueSmartRoutingAnalysis({
+    issueId: newId,
+    organizationId: orgResolution.organizationId,
+    organizationName: orgResolution.name,
+    title: input.title,
+    description: input.description,
+    categoryId: category.id,
     category: category.name,
     address,
     landmark,

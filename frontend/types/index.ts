@@ -57,6 +57,33 @@ export interface IssueAiAnalysisResponse {
   analysis: IssueAiAnalysis | null;
 }
 
+export interface SmartRoutingRecommendation {
+  departmentId: string;
+  departmentName: string;
+  confidence: number;
+  reason: string;
+  signals: string[];
+}
+
+export interface IssueAiRouting {
+  id: string;
+  issueId: string;
+  agentType: 'SMART_ROUTING';
+  status: AiAnalysisStatus;
+  modelProvider: string | null;
+  modelName: string | null;
+  confidence: number | null;
+  recommendation: SmartRoutingRecommendation | null;
+  source: 'AI' | 'DETERMINISTIC_FALLBACK' | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface IssueAiRoutingResponse {
+  analysis: IssueAiRouting | null;
+}
+
 export interface User {
   id: string;
   name: string;

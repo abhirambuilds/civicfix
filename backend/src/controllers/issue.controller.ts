@@ -14,6 +14,7 @@ import {
   getIssueStatusHistory,
 } from '../services/issue.service.js';
 import { getIssueIntelligenceForIssue } from '../services/issue-intelligence.service.js';
+import { getSmartRoutingForIssue } from '../services/smart-routing.service.js';
 import { issueQuerySchema } from '../validators/issue.validator.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
@@ -103,6 +104,29 @@ export async function getIssueAiAnalysisHandler(req: Request, res: Response): Pr
   }
 
   sendSuccess(res, result.data, 'AI issue analysis retrieved successfully', 200);
+}
+
+/**
+ * GET /api/issues/:issueId/ai-routing
+ * Return the latest validated Smart Routing recommendation for an authorized viewer.
+ */
+export async function getIssueAiRoutingHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const result = await getSmartRoutingForIssue(
+    req.user.id,
+    req.user.role,
+    req.params.issueId as string,
+  );
+  if (!result.success) {
+    sendError(res, result.error, result.statusCode);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'AI smart routing retrieved successfully', 200);
 }
 
 /**

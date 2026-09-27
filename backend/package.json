@@ -23,6 +23,7 @@
     "test:analytics": "tsx src/scripts/testPrompt20.ts",
     "test:security-remediation": "tsx src/scripts/testSecurityRemediation.ts",
     "test:ai": "tsx src/scripts/testIssueIntelligence.ts",
+    "test:routing": "tsx src/scripts/testSmartRouting.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {
