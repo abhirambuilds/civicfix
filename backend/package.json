@@ -18,6 +18,7 @@
     "test:dept": "tsx src/scripts/testDepartment.ts",
     "test:issue": "tsx src/scripts/testIssue.ts",
     "test:storage": "tsx src/scripts/testStorage.ts",
+    "test:org-issues": "tsx src/scripts/testPrompt17.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

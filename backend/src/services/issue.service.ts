@@ -1058,8 +1058,31 @@ export async function listIssues(
       }
       where.organizationId = organizationId;
     } else {
-      // Constrain to SRM demo org or all organizations where user is owner/admin
-      where.organizationId = 'a0000000-0000-0000-0000-000000000001';
+      let resolvedOrgId: string | null = null;
+      if (hasDbUrl()) {
+        try {
+          const membership = await db.organizationMember.findFirst({
+            where: {
+              userId,
+              isActive: true,
+              organization: { isActive: true },
+            },
+          });
+          if (membership) {
+            resolvedOrgId = membership.organizationId;
+          }
+        } catch {}
+      }
+      where.organizationId = resolvedOrgId || 'a0000000-0000-0000-0000-000000000001';
+    }
+
+    if (departmentId) {
+      where.assignments = {
+        some: {
+          departmentId,
+          isActive: true,
+        },
+      };
     }
   } else if (userRole === UserRole.MANAGER) {
     // Department manager is constrained to their assigned department(s)
@@ -1237,6 +1260,20 @@ export async function listIssues(
     filtered = filtered.filter((i) => {
       const asgns = MOCK_ASSIGNMENTS.get(i.id) || [];
       return asgns.some((a) => a.departmentId === targetDeptId && a.isActive);
+    });
+  }
+  if (where.assignments?.some?.OR) {
+    const orClauses = where.assignments.some.OR;
+    filtered = filtered.filter((i) => {
+      const asgns = MOCK_ASSIGNMENTS.get(i.id) || [];
+      return asgns.some((a) => {
+        if (!a.isActive) return false;
+        return orClauses.some((clause: any) => {
+          if (clause.departmentId && a.departmentId === clause.departmentId) return true;
+          if (clause.assignedUserId && a.assignedUserId === clause.assignedUserId) return true;
+          return false;
+        });
+      });
     });
   }
   if (search && search.trim() !== '') {

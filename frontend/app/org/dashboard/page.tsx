@@ -448,10 +448,10 @@ export default function OrgDashboardPage() {
               </div>
 
               <Link
-                href="/dashboard/issues"
+                href="/org/issues"
                 className="text-xs font-medium text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1 transition-colors"
               >
-                <span>View My Reports</span>
+                <span>View All Issues</span>
                 <IconChevronRight size={14} />
               </Link>
             </div>
@@ -471,7 +471,7 @@ export default function OrgDashboardPage() {
                 {recentIssues.map((issue) => (
                   <Link
                     key={issue.id}
-                    href={`/dashboard/issues/${issue.id}`}
+                    href={`/org/issues/${issue.id}`}
                     className="block p-4 rounded-xl border border-slate-800/80 bg-slate-900/60 hover:bg-slate-900 hover:border-slate-700/80 transition-all duration-150 space-y-2.5 shadow-sm group"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -551,12 +551,12 @@ export default function OrgDashboardPage() {
                 </div>
 
                 <Link
-                  href="/dashboard/issues"
+                  href="/org/issues"
                   className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-800 bg-slate-900/80 hover:bg-slate-800 hover:border-slate-700 text-xs font-medium text-slate-200 transition-colors"
                 >
                   <span className="flex items-center gap-2">
                     <IconFileText size={15} className="text-indigo-400" />
-                    <span>View Issues Log</span>
+                    <span>Issue Management</span>
                   </span>
                   <IconChevronRight size={14} className="text-slate-400" />
                 </Link>

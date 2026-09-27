@@ -12,6 +12,7 @@ import {
   IconSparkles,
   IconX,
   IconBuilding,
+  IconLayers,
 } from '@/components/ui/Icons';
 
 interface SidebarProps {
@@ -47,10 +48,16 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
     ...(isStaffRole
       ? [
           {
-            label: 'Org Operations',
+            label: 'Org Dashboard',
             href: '/org/dashboard',
             icon: IconBuilding,
-            active: pathname.startsWith('/org/dashboard'),
+            active: pathname === '/org/dashboard',
+          },
+          {
+            label: 'Issue Management',
+            href: '/org/issues',
+            icon: IconLayers,
+            active: pathname.startsWith('/org/issues'),
           },
         ]
       : []),

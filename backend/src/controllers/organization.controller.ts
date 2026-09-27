@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { UserRole } from '@prisma/client';
 import {
   createOrganization,
   listOrganizations,
@@ -38,6 +39,49 @@ export async function getOrgDashboard(
     }
 
     sendSuccess(res, result.data, 'Organization dashboard retrieved successfully', 200);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getOrgDepartments(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user || !req.user.id) {
+      sendError(res, 'Authentication required.', 401);
+      return;
+    }
+
+    if (req.user.role === UserRole.USER) {
+      sendError(res, 'Forbidden: Public users cannot view administrative departments.', 403);
+      return;
+    }
+
+    const requestedOrgId = (req.params.organizationId || req.query.organizationId) as string | undefined;
+    const dashboardResult = await getOrganizationDashboardData(
+      req.user.id,
+      req.user.role,
+      requestedOrgId
+    );
+
+    if (!dashboardResult.success || !dashboardResult.data) {
+      sendError(
+        res,
+        dashboardResult.error || 'Failed to retrieve organization departments',
+        dashboardResult.statusCode || 403
+      );
+      return;
+    }
+
+    sendSuccess(
+      res,
+      { departments: dashboardResult.data.departments },
+      'Departments retrieved successfully',
+      200
+    );
   } catch (error) {
     next(error);
   }

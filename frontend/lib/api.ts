@@ -15,6 +15,7 @@ import {
   IssueImage,
   User,
   OrganizationDashboardData,
+  OrganizationDepartmentSummary,
 } from '@/types';
 
 export const API_BASE_URL =
@@ -185,6 +186,9 @@ export interface IssueQueryParams {
   limit?: number;
   sort?: string;
   order?: 'asc' | 'desc';
+  priority?: string;
+  departmentId?: string;
+  organizationId?: string;
 }
 
 /**
@@ -241,6 +245,9 @@ export const issuesApi = {
     const query = new URLSearchParams();
     if (params?.status && params.status !== 'ALL') query.set('status', params.status);
     if (params?.categoryId && params.categoryId !== 'ALL') query.set('categoryId', params.categoryId);
+    if (params?.priority && params.priority !== 'ALL') query.set('priority', params.priority);
+    if (params?.departmentId && params.departmentId !== 'ALL') query.set('departmentId', params.departmentId);
+    if (params?.organizationId) query.set('organizationId', params.organizationId);
     if (params?.search) query.set('search', params.search);
     if (params?.page) query.set('page', params.page.toString());
     if (params?.limit) query.set('limit', params.limit.toString());
@@ -327,6 +334,13 @@ export const organizationsApi = {
       ? `/organizations/${organizationId}/dashboard`
       : '/organizations/me/dashboard';
     return fetchApi<OrganizationDashboardData>(endpoint);
+  },
+
+  /**
+   * Retrieve active departments for the authenticated user's organization
+   */
+  async getDepartments(): Promise<{ departments: OrganizationDepartmentSummary[] }> {
+    return fetchApi<{ departments: OrganizationDepartmentSummary[] }>('/organizations/me/departments');
   },
 };
 
