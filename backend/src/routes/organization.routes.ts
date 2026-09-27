@@ -25,6 +25,7 @@ import {
   removeMember,
 } from '../controllers/organization.controller.js';
 import departmentRouter from './department.routes.js';
+import { getOrgAnalytics } from '../controllers/analytics.controller.js';
 
 const organizationRouter = Router();
 
@@ -69,7 +70,14 @@ organizationRouter.get(
   getOrgDeptMembers
 );
 
-// 2e. Organization Dashboard Summary by ID (Authorized Organization Member)
+// 2e. Organization Analytics (organization is derived from authenticated context)
+organizationRouter.get(
+  '/me/analytics',
+  requireAuth,
+  getOrgAnalytics
+);
+
+// 2f. Organization Dashboard Summary by ID (Authorized Organization Member)
 organizationRouter.get(
   '/:organizationId/dashboard',
   requireAuth,

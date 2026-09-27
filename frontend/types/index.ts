@@ -262,3 +262,43 @@ export interface OrganizationMemberSummary {
     isActive: boolean;
   };
 }
+
+export type AnalyticsTimeRange = '7' | '30' | '90' | 'all';
+
+export interface AnalyticsPoint {
+  label: string;
+  value: number;
+}
+
+export interface OrganizationAnalyticsData {
+  organization: {
+    id: string;
+    name: string;
+  };
+  filters: {
+    timeRange: AnalyticsTimeRange;
+    departmentId: string | null;
+    categoryId: string | null;
+    startDate: string | null;
+    timezone: 'UTC';
+  };
+  summary: {
+    totalIssues: number;
+    openIssues: number;
+    inProgress: number;
+    resolved: number;
+    closed: number;
+  };
+  byStatus: AnalyticsPoint[];
+  byCategory: AnalyticsPoint[];
+  byDepartment: AnalyticsPoint[];
+  byPriority: AnalyticsPoint[];
+  trend: AnalyticsPoint[];
+  resolution: {
+    resolvedCount: number;
+    closedCount: number;
+    averageResolutionHours: number | null;
+    resolutionRate: number | null;
+    averageSampleSize: number;
+  };
+}

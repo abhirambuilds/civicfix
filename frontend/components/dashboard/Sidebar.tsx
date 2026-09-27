@@ -75,6 +75,12 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
                 },
               ]
             : []),
+          {
+            label: 'Analytics',
+            href: '/org/analytics',
+            icon: IconLayers,
+            active: pathname.startsWith('/org/analytics'),
+          },
         ]
       : []),
   ];

@@ -561,12 +561,23 @@ export default function OrgDashboardPage() {
                   <IconChevronRight size={14} className="text-slate-400" />
                 </Link>
 
+                <Link
+                  href="/org/analytics"
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-800 bg-slate-900/80 hover:bg-slate-800 hover:border-slate-700 text-xs font-medium text-slate-200 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <IconLayers size={15} className="text-emerald-400" />
+                    <span>Organization Analytics</span>
+                  </span>
+                  <IconChevronRight size={14} className="text-slate-400" />
+                </Link>
+
                 <div className="p-3 rounded-xl border border-dashed border-slate-800 text-[11px] text-slate-400 space-y-1">
                   <span className="font-semibold text-slate-300 block">
-                    Upcoming Capabilities
+                    Operational context
                   </span>
                   <p>
-                    Full assignment dispatching, workflow remarks, and department staff rosters will unlock in the next release.
+                    Use analytics to review factual issue volume, distribution, and resolution timing for your authorized scope.
                   </p>
                 </div>
               </div>

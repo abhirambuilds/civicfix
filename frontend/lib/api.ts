@@ -23,6 +23,8 @@ import {
   ManagedDepartment,
   OrganizationMemberSummary,
   OrganizationMemberRole,
+  AnalyticsTimeRange,
+  OrganizationAnalyticsData,
 } from '@/types';
 
 export const API_BASE_URL =
@@ -426,6 +428,22 @@ export const organizationsApi = {
    */
   async getDepartments(): Promise<{ departments: OrganizationDepartmentSummary[] }> {
     return fetchApi<{ departments: OrganizationDepartmentSummary[] }>('/organizations/me/departments');
+  },
+
+  /** Retrieve server-aggregated analytics for the authenticated organization. */
+  async getAnalytics(params?: {
+    timeRange?: AnalyticsTimeRange;
+    departmentId?: string;
+    categoryId?: string;
+  }): Promise<OrganizationAnalyticsData> {
+    const query = new URLSearchParams();
+    if (params?.timeRange) query.set('timeRange', params.timeRange);
+    if (params?.departmentId) query.set('departmentId', params.departmentId);
+    if (params?.categoryId) query.set('categoryId', params.categoryId);
+    const queryString = query.toString();
+    return fetchApi<OrganizationAnalyticsData>(
+      `/organizations/me/analytics${queryString ? `?${queryString}` : ''}`
+    );
   },
 
   /**
