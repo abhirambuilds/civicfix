@@ -700,13 +700,152 @@ Response (`201 Created`):
 
 ---
 
-## 14. Development Commands
+## 14. Core Civic Issue APIs
+
+The Civic Issue subsystem forms the core functional foundation of CivicFix. It allows authenticated citizens to report civic problems with GPS coordinates and descriptions, while providing authorized organization administrators, managers, and staff with scoped issue triage, searching, and remarks.
+
+### 14.1 Issue Endpoints
+
+| Method | Endpoint | Allowed Roles | Description | Status Codes |
+|---|---|---|---|---|
+| `POST` | `/api/issues` | Any authenticated user (`USER`, `STAFF`, `MANAGER`, `ORG_ADMIN`, `ORG_OWNER`, `PLATFORM_ADMIN`) | Report a new civic issue with location | `201`, `400`, `401`, `404` |
+| `GET` | `/api/issues` | Any authenticated user (results scoped by role and permissions) | List issues with search, filtering, and pagination | `200`, `400`, `401`, `403` |
+| `GET` | `/api/issues/:issueId` | Issue reporter, assigned staff/manager, organization admin, platform admin | Retrieve detailed issue information | `200`, `400`, `401`, `403`, `404` |
+| `POST` | `/api/issues/:issueId/comments` | Authorized issue participants | Add a comment or remark to an issue | `201`, `400`, `401`, `403`, `404` |
+| `GET` | `/api/issues/:issueId/comments` | Authorized issue participants | Retrieve comments (internal remarks filtered for `USER`) | `200`, `400`, `401`, `403`, `404` |
+| `GET` | `/api/issue-categories` | Any authenticated user | List active issue taxonomy categories | `200`, `401` |
+
+### 14.2 Authorization & Role-Based Scoping
+
+1. **Normal Citizens (`USER`)**:
+   - `POST /api/issues`: Can report issues. Authoritative reporter identity is derived strictly from JWT (`req.user.id`).
+   - `GET /api/issues`: List is **strictly scoped to issues reported by the authenticated user** (`reporterId = req.user.id`). Query parameters such as `?organizationId=...` or `?departmentId=...` cannot bypass this ownership constraint.
+   - `GET /api/issues/:issueId`: Can only access their own reported issue. Access to other users' issues is rejected with `403 Forbidden` (preventing IDOR attacks).
+   - Priority Protection: Normal users cannot set arbitrary severity (e.g. `CRITICAL`). Priority defaults safely to the category's configured default priority or `MEDIUM`.
+2. **Organization Owner (`ORG_OWNER`) & Org Admin (`ORG_ADMIN`)**:
+   - Can view and manage all issues belonging to their organization.
+   - Cross-tenant queries attempting to access another organization's issues are rejected with `403 Forbidden`.
+   - Can set explicit priority on creation where appropriate.
+3. **Department Manager (`MANAGER`)**:
+   - Scoped strictly to issues assigned to their active department(s).
+   - Access to unrelated departments' issues is rejected with `403 Forbidden`.
+4. **Operational Staff (`STAFF`)**:
+   - Scoped to issues assigned directly to the user or assigned to their department.
+   - Access to unrelated departments' issues is rejected with `403 Forbidden`.
+5. **Platform Admin (`PLATFORM_ADMIN`)**:
+   - Platform-wide visibility across all tenant organizations.
+
+### 14.3 Initial Lifecycle & Atomic Transactions
+
+- **Initial Status**: New issues are strictly initialized to `REPORTED`.
+- **Atomic Creation**: Issue creation utilizes a Prisma database transaction ensuring that:
+  1. The core `Issue` record is created with an auto-generated unique tracking number (e.g., `CF-SRM-2026-XXXX`).
+  2. The `IssueLocation` record (latitude, longitude, address, landmark) is created atomically.
+  3. The initial `IssueStatusHistory` audit record (`previousStatus = null`, `newStatus = REPORTED`) is created atomically.
+- **Comments & Remarks Privacy**:
+  - Operational staff and administrators can create internal remarks (`isInternal: true`).
+  - Citizens (`USER`) can only post public comments (`isInternal: false`).
+  - When a `USER` retrieves comments, internal staff remarks are filtered out automatically.
+
+### 14.4 Query Filters & Pagination
+
+`GET /api/issues` supports the following query parameters:
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `search` | String | - | Case-insensitive search across issue `title` and `description` |
+| `categoryId` | UUID | - | Filter by active category ID |
+| `status` | Enum | - | Filter by status (`REPORTED`, `UNDER_REVIEW`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`) |
+| `priority` | Enum | - | Filter by priority (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) |
+| `organizationId` | UUID | - | Filter by tenant organization (subject to role authorization) |
+| `departmentId` | UUID | - | Filter by assigned department (subject to role authorization) |
+| `page` | Integer | `1` | Page number (1-indexed) |
+| `limit` | Integer | `20` | Results per page (maximum limit: `100`) |
+| `sort` | String | `createdAt` | Sort column (`createdAt`, `updatedAt`, `title`, `status`, `priority`) |
+| `order` | String | `desc` | Sort direction (`asc` or `desc`) |
+
+### 14.5 Example Requests & Responses
+
+#### Report an Issue
+`POST /api/issues`
+
+Headers:
+```http
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+Request Body:
+```json
+{
+  "title": "Streetlight near Hostel 3 is not working",
+  "description": "The outdoor lamp post #14 has been dark since yesterday, making the walkway unsafe at night.",
+  "categoryId": "c0000000-0000-0000-0000-000000000002",
+  "latitude": 12.823,
+  "longitude": 80.045,
+  "locationLabel": "Near Hostel 3, SRM Kattankulathur Campus"
+}
+```
+
+Response (`201 Created`):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "a1000000-0000-0000-0000-000000000101",
+    "issueNumber": "CF-SRM-2026-8K2Q1",
+    "reporterId": "f0000000-0000-0000-0000-000000000006",
+    "organizationId": "a0000000-0000-0000-0000-000000000001",
+    "categoryId": "c0000000-0000-0000-0000-000000000002",
+    "title": "Streetlight near Hostel 3 is not working",
+    "description": "The outdoor lamp post #14 has been dark since yesterday, making the walkway unsafe at night.",
+    "status": "REPORTED",
+    "priority": "MEDIUM",
+    "createdAt": "2026-09-27T12:00:00.000Z",
+    "updatedAt": "2026-09-27T12:00:00.000Z",
+    "location": {
+      "id": "loc-101",
+      "latitude": 12.823,
+      "longitude": 80.045,
+      "address": "Near Hostel 3, SRM Kattankulathur Campus",
+      "landmark": null
+    },
+    "category": {
+      "id": "c0000000-0000-0000-0000-000000000002",
+      "name": "Streetlight",
+      "slug": "streetlight",
+      "icon": "lightbulb",
+      "defaultPriority": "MEDIUM"
+    },
+    "reporter": {
+      "id": "f0000000-0000-0000-0000-000000000006",
+      "name": "SRM Campus Student",
+      "email": "student@civicfix.demo",
+      "role": "USER"
+    },
+    "statusHistory": [
+      {
+        "id": "hist-101",
+        "previousStatus": null,
+        "newStatus": "REPORTED",
+        "remark": "Issue reported.",
+        "createdAt": "2026-09-27T12:00:00.000Z"
+      }
+    ]
+  },
+  "message": "Issue reported successfully"
+}
+```
+
+---
+
+## 15. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
 
 ```bash
-# Run both checks across frontend and backend (typecheck & builds)
+# Run all checks across frontend and backend (typecheck & builds)
 npm run check
 
 # Start Backend Development Server (Port 5000)
@@ -745,6 +884,9 @@ npm run test:org
 # Run Automated Department & Staff Management Tests (67 assertions)
 npm run test:dept
 
+# Run Automated Core Civic Issue API Tests (74 assertions)
+npm run test:issue
+
 # Test Database Connectivity
 npm run test:db
 
@@ -754,7 +896,7 @@ npm run db:seed
 
 ---
 
-## 15. Environment Variables Template
+## 16. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -792,7 +934,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 16. Implementation Roadmap & Deferred Scope
+## 17. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -804,7 +946,10 @@ GEMINI_API_KEY=
 | **Prompt 6: Role-Based Access Control (RBAC)** | &check; Complete | Reusable authorization middlewares, multi-tenant organization isolation, department isolation, user ownership, RBAC test suite |
 | **Prompt 7: Platform Admin & Organization Management** | &check; Complete | Multi-tenant organization CRUD, status toggling, safe member management, privilege escalation guards, organization test suite |
 | **Prompt 8: Organization Departments & Staff Management** | &check; Complete | Department CRUD, active status lifecycle, department staff rosters, manager boundaries, cross-org/cross-dept isolation |
-| **Prompt 9: Issue APIs & Storage** | Upcoming | Issue creation, Supabase Storage uploads, Leaflet geocoding, triage endpoints |
-| **Prompt 10: AI Intelligence Agent** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
-| **Prompt 11: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+| **Prompt 9: Core Civic Issue APIs** | &check; Complete | Issue creation, atomic location/history transaction, ownership scoping, IDOR protection, comments, categories, filtering & pagination |
+| **Prompt 10: Assignment & Status Workflow** | Upcoming | Department & staff assignment, triage workflow, status transitions, resolution remarks |
+| **Prompt 11: Supabase Storage & Image Upload** | Upcoming | Multipart image uploads, Supabase Storage integration, photo evidence metadata |
+| **Prompt 12: AI Intelligence & Smart Routing** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
+| **Prompt 13: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+
 

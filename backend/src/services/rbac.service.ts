@@ -145,6 +145,21 @@ const SEEDED_ISSUES: Record<
   },
 };
 
+export function registerSeededIssue(
+  id: string,
+  issue: {
+    reporterId: string;
+    organizationId: string;
+    assignments?: { departmentId: string; assignedUserId: string }[];
+  }
+): void {
+  SEEDED_ISSUES[id] = {
+    reporterId: issue.reporterId,
+    organizationId: issue.organizationId,
+    assignments: issue.assignments || [],
+  };
+}
+
 const hasDbUrl = (): boolean =>
   Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== '');
 

@@ -5,3 +5,4 @@ export * from './auth.service.js';
 export * from './rbac.service.js';
 export * from './organization.service.js';
 export * from './department.service.js';
+export * from './issue.service.js';
