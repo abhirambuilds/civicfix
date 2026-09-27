@@ -10,7 +10,38 @@ import {
   updateOrganizationMember,
   removeOrganizationMember,
 } from '../services/organization.service.js';
+import { getOrganizationDashboardData } from '../services/issue.service.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
+
+export async function getOrgDashboard(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user || !req.user.id) {
+      sendError(res, 'Authentication required.', 401);
+      return;
+    }
+
+    const requestedOrgId = (req.params.organizationId || req.query.organizationId) as string | undefined;
+
+    const result = await getOrganizationDashboardData(
+      req.user.id,
+      req.user.role,
+      requestedOrgId
+    );
+
+    if (!result.success) {
+      sendError(res, result.error || 'Failed to retrieve organization dashboard', result.statusCode || 403);
+      return;
+    }
+
+    sendSuccess(res, result.data, 'Organization dashboard retrieved successfully', 200);
+  } catch (error) {
+    next(error);
+  }
+}
 
 export async function createOrg(
   req: Request,

@@ -9,7 +9,7 @@ import { IconAlertCircle, IconArrowRight, IconSparkles } from '@/components/ui/I
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,9 +20,13 @@ function LoginForm() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace('/dashboard');
+      if (user?.role && user.role !== 'USER') {
+        router.replace('/org/dashboard');
+      } else {
+        router.replace('/dashboard');
+      }
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,8 +39,12 @@ function LoginForm() {
     setErrorMessage(null);
 
     try {
-      await login(email.trim(), password);
-      router.push('/dashboard');
+      const loggedInUser = await login(email.trim(), password);
+      if (loggedInUser.role && loggedInUser.role !== 'USER') {
+        router.push('/org/dashboard');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: unknown) {
       const msg =
         err instanceof Error
@@ -50,8 +58,13 @@ function LoginForm() {
 
   const handleQuickFillStudent = () => {
     setEmail('student@civicfix.demo');
-    // Fill demo password placeholder if configured or prompt user
     setPassword('Student@Demo2026!');
+    setErrorMessage(null);
+  };
+
+  const handleQuickFillAdmin = () => {
+    setEmail('srm.admin@civicfix.demo');
+    setPassword('Password123!');
     setErrorMessage(null);
   };
 
@@ -151,23 +164,33 @@ function LoginForm() {
       </form>
 
       {/* Demo Credentials Quick-Fill */}
-      <div className="p-3.5 rounded-xl border border-slate-800/80 bg-slate-950/60 text-xs text-slate-400 space-y-2">
+      <div className="p-3.5 rounded-xl border border-slate-800/80 bg-slate-950/60 text-xs text-slate-400 space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-slate-300 flex items-center gap-1.5">
             <IconSparkles size={14} className="text-indigo-400" />
-            <span>Development Demo Account</span>
+            <span>Development Demo Accounts</span>
           </span>
+        </div>
+        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800/60">
+          <span>Student: <code className="font-mono text-slate-300">student@civicfix.demo</code></span>
           <button
             type="button"
             onClick={handleQuickFillStudent}
             className="text-xs font-medium text-indigo-400 hover:text-indigo-300 underline"
           >
-            Auto-fill
+            Fill Student
           </button>
         </div>
-        <p className="text-[11px] text-slate-400">
-          Account: <code className="font-mono text-slate-300">student@civicfix.demo</code> (Seeded Student user with 3 active reports).
-        </p>
+        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800/60">
+          <span>SRM Admin: <code className="font-mono text-slate-300">srm.admin@civicfix.demo</code></span>
+          <button
+            type="button"
+            onClick={handleQuickFillAdmin}
+            className="text-xs font-medium text-indigo-400 hover:text-indigo-300 underline"
+          >
+            Fill Admin
+          </button>
+        </div>
       </div>
 
       <div className="text-center pt-2 border-t border-slate-800/80">

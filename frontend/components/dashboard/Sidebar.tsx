@@ -11,6 +11,7 @@ import {
   IconLogOut,
   IconSparkles,
   IconX,
+  IconBuilding,
 } from '@/components/ui/Icons';
 
 interface SidebarProps {
@@ -20,6 +21,8 @@ interface SidebarProps {
 export function Sidebar({ onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+
+  const isStaffRole = user?.role && user.role !== 'USER';
 
   const navItems = [
     {
@@ -41,6 +44,16 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
       active: pathname === '/dashboard/report',
       highlight: true,
     },
+    ...(isStaffRole
+      ? [
+          {
+            label: 'Org Operations',
+            href: '/org/dashboard',
+            icon: IconBuilding,
+            active: pathname.startsWith('/org/dashboard'),
+          },
+        ]
+      : []),
   ];
 
   return (

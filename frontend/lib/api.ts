@@ -14,6 +14,7 @@ import {
   IssueStatusHistory,
   IssueImage,
   User,
+  OrganizationDashboardData,
 } from '@/types';
 
 export const API_BASE_URL =
@@ -313,3 +314,19 @@ export const categoriesApi = {
     return fetchApi<IssueCategory[]>('/issue-categories');
   },
 };
+
+/**
+ * Organizations API Service
+ */
+export const organizationsApi = {
+  /**
+   * Retrieve organization dashboard summary for the authenticated staff user
+   */
+  async getDashboard(organizationId?: string): Promise<OrganizationDashboardData> {
+    const endpoint = organizationId
+      ? `/organizations/${organizationId}/dashboard`
+      : '/organizations/me/dashboard';
+    return fetchApi<OrganizationDashboardData>(endpoint);
+  },
+};
+

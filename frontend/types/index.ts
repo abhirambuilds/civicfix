@@ -174,3 +174,40 @@ export interface HealthCheckData {
   timestamp: string;
   uptime: number;
 }
+
+export interface OrganizationDepartmentSummary {
+  id: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+  isActive: boolean;
+  activeIssueCount: number;
+  memberCount: number;
+}
+
+export interface OrganizationDashboardData {
+  organization: {
+    id: string;
+    name: string;
+    slug: string;
+    orgType: string;
+    description: string | null;
+  };
+  currentUser: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    orgRole: string;
+  };
+  summary: {
+    totalIssues: number;
+    reported: number;
+    inProgress: number;
+    resolved: number;
+    statusBreakdown: Record<IssueStatus, number>;
+  };
+  recentIssues: Issue[];
+  departments: OrganizationDepartmentSummary[];
+}
+
