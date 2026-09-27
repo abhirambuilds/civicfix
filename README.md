@@ -1083,7 +1083,42 @@ The User / Student Dashboard is the primary citizen interface for CivicFix. It a
 
 ---
 
-## 18. Development Commands
+## 18. OpenStreetMap & Location Selection System
+
+CivicFix features an interactive, privacy-respecting location selection system built with **Leaflet**, **React-Leaflet**, and **OpenStreetMap** tiles. It allows users to pinpoint civic issues across campus or municipality boundaries without manually typing latitude and longitude.
+
+```
++-----------------------------------------------------------------------------------+
+|  Selected Coordinates: Lat: 12.823600 | Lng: 80.045400   [GPS Acquired] [Use GPS]  |
++-----------------------------------------------------------------------------------+
+|                                                                                   |
+|         OpenStreetMap Tiles (HTTPS, © OpenStreetMap contributors)                |
+|                                                                                   |
+|                                [ Pin Marker ]                                     |
+|                                  (Draggable)                                      |
+|                                                                                   |
+|   - Tap / Click anywhere to place pin                                             |
+|   - Drag pin needle to fine-tune exact location                                   |
+|   - "Use My Current Location" button queries device GPS on demand                 |
+|                                                                                   |
++-----------------------------------------------------------------------------------+
+```
+
+### 18.1 Key Architectural Principles
+
+1. **Zero External API Keys:** Powered by standard OpenStreetMap tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) under HTTPS with mandatory visible attribution (`© OpenStreetMap contributors`). No Google Maps or Mapbox API keys required.
+2. **SSR Safety via Dynamic Import:** Leaflet depends on `window` and `document`. The inner map component is loaded via Next.js `dynamic(..., { ssr: false })` with a loading skeleton to guarantee zero SSR hydration mismatches.
+3. **Bundled SVG Marker (No Broken Images):** Avoids standard Leaflet PNG marker assets that frequently fail in Next.js bundlers by using a custom, high-contrast SVG `L.divIcon` with pinpoint anchor alignment.
+4. **On-Demand GPS Only:** Geolocation is requested strictly when the user clicks **"Use My Current Location"**. No continuous tracking (`watchPosition`), no automatic prompts on page load, and no permanent coordinate storage prior to form submission.
+5. **Interactive Controls:**
+   - **Click-to-Move:** Tapping anywhere immediately repositions the marker and updates coordinates.
+   - **Draggable Marker:** The pin can be grabbed and dragged directly.
+   - **Graceful Geolocation Errors:** Handles permission denial, timeout, and device unavailability with user-friendly actionable notices while keeping the map fully operable.
+   - **Campus Center Fallback:** Initial view centers on SRM Kattankulathur Campus (`12.8236, 80.0454`), clearly designated as a default center rather than the user's actual position.
+
+---
+
+## 19. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -1143,7 +1178,7 @@ npm run db:seed
 
 ---
 
-## 19. Environment Variables Template
+## 20. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -1181,7 +1216,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 20. Implementation Roadmap & Deferred Scope
+## 21. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -1197,8 +1232,10 @@ GEMINI_API_KEY=
 | **Prompt 10: Assignment & Status Workflow** | &check; Complete | Complete workflow lifecycle, state machine validation, department & staff assignment, auto-transition, priority management, resolution, status/assignment audit history |
 | **Prompt 11: Supabase Storage & Image Upload** | &check; Complete | Multipart image uploads, private bucket (`issue-images`), magic-byte validation, short-lived signed URLs, deletion & rollback |
 | **Prompt 12: User / Student Dashboard** | &check; Complete | Authenticated student dashboard, stats cards, recent issues, issue details, status timeline, public comments, photo preview |
-| **Prompt 13: Interactive Map & Issue Reporting** | Upcoming | Leaflet, OpenStreetMap, GPS tracking, draggable pin, photo attachment flow |
-| **Prompt 14: Authority & Staff Management UI** | Upcoming | Organization admin dashboard, department lead triage, priority & status management |
+| **Prompt 13: Leaflet & OpenStreetMap Location Selection** | &check; Complete | Reusable LocationPicker component, OpenStreetMap tiles, draggable pin, map-click positioning, GPS detection |
+| **Prompt 14: Interactive Issue Reporting Flow** | Upcoming | Category selection, description, photo attachment integration, issue creation submission |
+| **Prompt 15: Authority & Staff Management UI** | Upcoming | Organization admin dashboard, department lead triage, priority & status management |
+
 
 
 

@@ -1,4 +1,51 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* Leaflet Map Dark Theme Overrides & Polish */
+.leaflet-container {
+  font-family: inherit;
+  background-color: #020617; /* slate-950 */
+}
+
+.leaflet-bar {
+  border: 1px solid rgba(51, 65, 85, 0.8) !important; /* slate-700 */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden;
+}
+
+.leaflet-bar a {
+  background-color: #0f172a !important; /* slate-900 */
+  color: #e2e8f0 !important; /* slate-200 */
+  border-bottom: 1px solid rgba(51, 65, 85, 0.8) !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: #1e293b !important; /* slate-800 */
+  color: #ffffff !important;
+}
+
+.leaflet-bar a.leaflet-disabled {
+  background-color: #0f172a !important;
+  color: #64748b !important;
+}
+
+.leaflet-control-attribution {
+  background-color: rgba(15, 23, 42, 0.85) !important; /* slate-900 with alpha */
+  color: #94a3b8 !important; /* slate-400 */
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-top-left-radius: 4px;
+}
+
+.leaflet-control-attribution a {
+  color: #818cf8 !important; /* indigo-400 */
+  text-decoration: none !important;
+}
+
+.leaflet-control-attribution a:hover {
+  text-decoration: underline !important;
+}
 
 :root {
   --background: #ffffff;

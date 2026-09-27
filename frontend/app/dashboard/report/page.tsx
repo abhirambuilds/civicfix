@@ -1,7 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { LocationPicker } from '@/components/map/LocationPicker';
+import { Coordinates, DEFAULT_CAMPUS_LOCATION } from '@/lib/constants';
 import {
   IconChevronLeft,
   IconPlusCircle,
@@ -12,8 +14,12 @@ import {
 } from '@/components/ui/Icons';
 
 export default function ReportIssuePage() {
+  const [selectedLocation, setSelectedLocation] = useState<Coordinates>(
+    DEFAULT_CAMPUS_LOCATION
+  );
+
   return (
-    <div className="space-y-6 max-w-3xl mx-auto animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-200">
       {/* Breadcrumb Navigation */}
       <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs text-slate-400">
         <Link href="/dashboard" className="hover:text-slate-200 transition-colors">
@@ -35,6 +41,25 @@ export default function ReportIssuePage() {
           Submit photos, description, and location of issues on campus or in your neighborhood.
           Our automated routing engine assigns your report directly to the responsible facilities department.
         </p>
+      </div>
+
+      {/* Interactive Location Selection System */}
+      <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm space-y-4">
+        <div>
+          <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+            <IconMapPin size={18} className="text-rose-400" />
+            <span>Select Issue Location</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-1">
+            Pinpoint the exact location of the issue. Use browser GPS detection or drag the pin anywhere across the SRM Campus map.
+          </p>
+        </div>
+
+        <LocationPicker
+          value={selectedLocation}
+          onChange={setSelectedLocation}
+          height="h-[420px]"
+        />
       </div>
 
       {/* Workflow Preview Card */}
@@ -79,10 +104,10 @@ export default function ReportIssuePage() {
         <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-950/20 text-indigo-200 text-xs space-y-2">
           <div className="flex items-center gap-2 font-semibold text-indigo-300">
             <IconCheckCircle size={16} />
-            <span>Interactive Map &amp; Form Integration Ready</span>
+            <span>Interactive Map &amp; Location System Active</span>
           </div>
           <p className="leading-relaxed text-slate-300">
-            The image upload backend, storage bucket (<code className="text-indigo-300 font-mono">issue-images</code>), and core civic issue APIs are fully active. Interactive map pinpointing and full submission forms will be integrated in upcoming prompts.
+            Coordinates are stored in local client state (<code className="text-indigo-300 font-mono">{selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}</code>). Full report form submission and photographic evidence attachment will be integrated in upcoming prompts.
           </p>
         </div>
 
