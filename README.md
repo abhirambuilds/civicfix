@@ -839,7 +839,108 @@ Response (`201 Created`):
 
 ---
 
-## 15. Development Commands
+## 15. Issue Workflow & Assignment Layer
+
+CivicFix features a multi-tiered, strictly validated **Issue Workflow and Assignment Engine** designed for departmental accountability and multi-tenant security.
+
+### 15.1 Issue Lifecycle State Machine
+
+The standard lifecycle progresses linearly through six controlled operational states:
+
+```
+REPORTED ───► UNDER_REVIEW ───► ASSIGNED ───► IN_PROGRESS ───► RESOLVED ───► CLOSED
+                   │               ▲
+                   └───────────────┘ (Direct triage assignment)
+                                   ▲                                │
+                                   └────────────── Reopen ──────────┘
+```
+
+#### Valid State Transitions Table
+
+| Current Status | Permitted Target Statuses | Allowed Roles | Operational Notes |
+|---|---|---|---|
+| `REPORTED` | `UNDER_REVIEW`, `ASSIGNED` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Intake triage. Assignment auto-advances status to `ASSIGNED`. |
+| `UNDER_REVIEW` | `ASSIGNED`, `IN_PROGRESS` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER` | Investigation phase. Assigns to field team or starts inspection. |
+| `ASSIGNED` | `IN_PROGRESS`, `UNDER_REVIEW` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER`, `STAFF` | Staff technician or lead transitions ticket when work begins. |
+| `IN_PROGRESS` | `RESOLVED`, `UNDER_REVIEW` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER`, `STAFF` | On-site work completed; triggers resolution recording. |
+| `RESOLVED` | `CLOSED`, `IN_PROGRESS` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER` (close); `ORG_OWNER`/`ORG_ADMIN` (reopen) | Verification stage. `CLOSED` requires admin/manager confirmation. Reopening allowed for defect remediation. |
+| `CLOSED` | `IN_PROGRESS`, `UNDER_REVIEW` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN` | Post-closure administrative reopen for audit or recurring issues. |
+
+#### Lifecycle Safeguards
+1. **No Arbitrary Jumps:** Direct transitions such as `REPORTED` &rarr; `CLOSED` or `REPORTED` &rarr; `RESOLVED` are rejected with `400 Bad Request`.
+2. **Duplicate Status Guard:** Setting an issue to its current status (e.g., `REPORTED` &rarr; `REPORTED`) is rejected with `400 Bad Request`.
+3. **Citizen Protection:** Normal citizens (`USER`) are strictly blocked from changing status (`403 Forbidden`).
+4. **Staff Closure Guard:** Operational `STAFF` can transition issues through `IN_PROGRESS` and `RESOLVED`, but are denied from setting `CLOSED` (`403 Forbidden`). Only managers and administrators can verify and officially close issues.
+
+---
+
+### 15.2 Department & Staff Assignment
+
+Issues can be assigned to an internal department (e.g., Civil, Electrical) and optionally delegated directly to an active staff technician.
+
+#### Assignment Safeguards
+- **Tenant Isolation Guard:** An issue belonging to Organization A cannot be assigned to a department belonging to Organization B (`400 Bad Request`).
+- **Staff Roster Guard:** An assigned user (`userId`) must belong to the issue's organization AND must be an active member of the designated target department (`400 Bad Request`).
+- **Manager Boundary Guard:** Department managers may only assign or reassign issues to their own department (`403 Forbidden`).
+- **Auto-Advance Status:** If an issue is currently in `REPORTED` or `UNDER_REVIEW`, assigning it automatically transitions its status to `ASSIGNED` and creates an audit history record.
+- **Historical Record Preservation:** Assignments are never overwritten. When an issue is reassigned, previous active records have `isActive` flipped to `false`, and a new active record is created.
+
+---
+
+### 15.3 Administrative Priority Management
+
+Authorities can adjust priority levels (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`):
+- `PLATFORM_ADMIN`, `ORG_OWNER`, and `ORG_ADMIN` can adjust priority organization-wide.
+- `MANAGER` can update priority for issues currently assigned to their department.
+- `USER` and `STAFF` are strictly forbidden from modifying administrative priorities (`403 Forbidden`).
+- Priority updates automatically log internal remarks documenting the rationale.
+
+---
+
+### 15.4 Issue Resolution & Closure
+
+- **Resolution (`POST /api/issues/:id/resolve`):**
+  - Sets issue status to `RESOLVED`.
+  - Atomically records the `resolvedAt` timestamp.
+  - Creates an `IssueStatusHistory` audit entry.
+  - Automatically posts the resolution remark as a public comment visible to the reporting citizen.
+  - Blocked if the issue is already `RESOLVED` or `CLOSED` (`400 Bad Request`).
+- **Closure (`PATCH /api/issues/:id/status` with `CLOSED`):**
+  - Atomically sets the `closedAt` timestamp and logs verification remarks.
+
+---
+
+### 15.5 Workflow REST API Endpoints
+
+| Method | Endpoint | Authorized Roles | Description |
+|---|---|---|---|
+| `PATCH` | `/api/issues/:issueId/status` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER`, `STAFF` | Progress issue along state machine lifecycle with remark |
+| `POST` | `/api/issues/:issueId/assign` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER` (own dept) | Assign or reassign issue to department & optional staff technician |
+| `PATCH` | `/api/issues/:issueId/priority` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER` (own dept) | Update ticket priority with internal audit remark |
+| `POST` | `/api/issues/:issueId/resolve` | `PLATFORM_ADMIN`, `ORG_OWNER`, `ORG_ADMIN`, `MANAGER`, `STAFF` | Mark issue resolved, set `resolvedAt`, and log resolution comment |
+| `GET` | `/api/issues/:issueId/assignments` | All authorized actors with ticket read access | Retrieve chronological assignment audit log |
+| `GET` | `/api/issues/:issueId/status-history` | All authorized actors with ticket read access | Retrieve chronological state transition audit log |
+
+#### Sample Assignment Request (`POST /api/issues/:issueId/assign`)
+```json
+{
+  "departmentId": "b0000000-0000-0000-0000-000000000002",
+  "userId": "f0000000-0000-0000-0000-000000000005",
+  "notes": "Assigned to Electrical Field Technician for priority ballast replacement."
+}
+```
+
+#### Sample Status Transition Request (`PATCH /api/issues/:issueId/status`)
+```json
+{
+  "status": "IN_PROGRESS",
+  "remark": "Field technician has arrived on-site and initiated conduit inspection."
+}
+```
+
+---
+
+## 16. Development Commands
 
 ### Root Workspace Commands
 From the project root (`c:\Projects\CivicFix`):
@@ -884,7 +985,7 @@ npm run test:org
 # Run Automated Department & Staff Management Tests (67 assertions)
 npm run test:dept
 
-# Run Automated Core Civic Issue API Tests (74 assertions)
+# Run Automated Core Civic Issue & Workflow Tests (128 assertions)
 npm run test:issue
 
 # Test Database Connectivity
@@ -896,7 +997,7 @@ npm run db:seed
 
 ---
 
-## 16. Environment Variables Template
+## 17. Environment Variables Template
 
 Copy `.env.example` to `backend/.env` and `frontend/.env.local`:
 
@@ -934,7 +1035,7 @@ GEMINI_API_KEY=
 
 ---
 
-## 17. Implementation Roadmap & Deferred Scope
+## 18. Implementation Roadmap & Deferred Scope
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -947,9 +1048,10 @@ GEMINI_API_KEY=
 | **Prompt 7: Platform Admin & Organization Management** | &check; Complete | Multi-tenant organization CRUD, status toggling, safe member management, privilege escalation guards, organization test suite |
 | **Prompt 8: Organization Departments & Staff Management** | &check; Complete | Department CRUD, active status lifecycle, department staff rosters, manager boundaries, cross-org/cross-dept isolation |
 | **Prompt 9: Core Civic Issue APIs** | &check; Complete | Issue creation, atomic location/history transaction, ownership scoping, IDOR protection, comments, categories, filtering & pagination |
-| **Prompt 10: Assignment & Status Workflow** | Upcoming | Department & staff assignment, triage workflow, status transitions, resolution remarks |
+| **Prompt 10: Assignment & Status Workflow** | &check; Complete | Complete workflow lifecycle, state machine validation, department & staff assignment, auto-transition, priority management, resolution, status/assignment audit history |
 | **Prompt 11: Supabase Storage & Image Upload** | Upcoming | Multipart image uploads, Supabase Storage integration, photo evidence metadata |
 | **Prompt 12: AI Intelligence & Smart Routing** | Upcoming | Groq & Gemini asynchronous analysis, smart routing, duplicate detection |
 | **Prompt 13: Dashboards & UI** | Upcoming | Citizen reporter UI, Organization Admin dashboard, Platform Admin dashboard |
+
 
 

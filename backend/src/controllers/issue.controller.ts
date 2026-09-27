@@ -6,6 +6,12 @@ import {
   createIssueComment,
   getIssueComments,
   listIssueCategories,
+  updateIssueStatus,
+  assignIssue,
+  updateIssuePriority,
+  resolveIssue,
+  getIssueAssignments,
+  getIssueStatusHistory,
 } from '../services/issue.service.js';
 import { issueQuerySchema } from '../validators/issue.validator.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
@@ -128,4 +134,124 @@ export async function listCategoriesHandler(req: Request, res: Response): Promis
   }
 
   sendSuccess(res, result.data, 'Categories retrieved successfully', 200);
+}
+
+/**
+ * PATCH /api/issues/:issueId/status
+ * Transition an issue to a new status.
+ */
+export async function updateStatusHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const issueId = req.params.issueId as string;
+  const result = await updateIssueStatus(req.user.id, req.user.role, issueId, req.body);
+  if (!result.success) {
+    sendError(res, result.error || 'Failed to update status.', result.statusCode || 400);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'Issue status updated successfully', 200);
+}
+
+/**
+ * POST /api/issues/:issueId/assign
+ * Assign an issue to a department and optional staff technician.
+ */
+export async function assignIssueHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const issueId = req.params.issueId as string;
+  const result = await assignIssue(req.user.id, req.user.role, issueId, req.body);
+  if (!result.success) {
+    sendError(res, result.error || 'Failed to assign issue.', result.statusCode || 400);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'Issue assigned successfully', 201);
+}
+
+/**
+ * PATCH /api/issues/:issueId/priority
+ * Update priority for an issue.
+ */
+export async function updatePriorityHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const issueId = req.params.issueId as string;
+  const result = await updateIssuePriority(req.user.id, req.user.role, issueId, req.body);
+  if (!result.success) {
+    sendError(res, result.error || 'Failed to update priority.', result.statusCode || 400);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'Issue priority updated successfully', 200);
+}
+
+/**
+ * POST /api/issues/:issueId/resolve
+ * Mark an issue as resolved with resolution remark.
+ */
+export async function resolveIssueHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const issueId = req.params.issueId as string;
+  const result = await resolveIssue(req.user.id, req.user.role, issueId, req.body);
+  if (!result.success) {
+    sendError(res, result.error || 'Failed to resolve issue.', result.statusCode || 400);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'Issue resolved successfully', 200);
+}
+
+/**
+ * GET /api/issues/:issueId/assignments
+ * Retrieve assignment history for an issue.
+ */
+export async function getAssignmentsHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const issueId = req.params.issueId as string;
+  const result = await getIssueAssignments(req.user.id, req.user.role, issueId);
+  if (!result.success) {
+    sendError(res, result.error || 'Failed to retrieve assignments.', result.statusCode || 400);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'Issue assignments retrieved successfully', 200);
+}
+
+/**
+ * GET /api/issues/:issueId/status-history
+ * Retrieve status transition audit history for an issue.
+ */
+export async function getStatusHistoryHandler(req: Request, res: Response): Promise<void> {
+  if (!req.user || !req.user.id) {
+    sendError(res, 'Authentication required.', 401);
+    return;
+  }
+
+  const issueId = req.params.issueId as string;
+  const result = await getIssueStatusHistory(req.user.id, req.user.role, issueId);
+  if (!result.success) {
+    sendError(res, result.error || 'Failed to retrieve status history.', result.statusCode || 400);
+    return;
+  }
+
+  sendSuccess(res, result.data, 'Issue status history retrieved successfully', 200);
 }

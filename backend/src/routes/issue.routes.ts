@@ -5,12 +5,22 @@ import {
   getIssueHandler,
   createCommentHandler,
   getCommentsHandler,
+  updateStatusHandler,
+  assignIssueHandler,
+  updatePriorityHandler,
+  resolveIssueHandler,
+  getAssignmentsHandler,
+  getStatusHistoryHandler,
 } from '../controllers/issue.controller.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { validate } from '../validators/validate.middleware.js';
 import {
   createIssueSchema,
   createCommentSchema,
+  updateStatusSchema,
+  assignIssueSchema,
+  updatePrioritySchema,
+  resolveIssueSchema,
 } from '../validators/issue.validator.js';
 
 const issueRouter = Router();
@@ -35,6 +45,42 @@ issueRouter.get('/', listIssuesHandler);
  * Retrieve single issue details with verified authorization
  */
 issueRouter.get('/:issueId', getIssueHandler);
+
+/**
+ * PATCH /api/issues/:issueId/status
+ * Transition an issue to a new status
+ */
+issueRouter.patch('/:issueId/status', validate(updateStatusSchema), updateStatusHandler);
+
+/**
+ * POST /api/issues/:issueId/assign
+ * Assign an issue to a department and optional staff technician
+ */
+issueRouter.post('/:issueId/assign', validate(assignIssueSchema), assignIssueHandler);
+
+/**
+ * PATCH /api/issues/:issueId/priority
+ * Update priority for an issue
+ */
+issueRouter.patch('/:issueId/priority', validate(updatePrioritySchema), updatePriorityHandler);
+
+/**
+ * POST /api/issues/:issueId/resolve
+ * Mark an issue as resolved with resolution remark
+ */
+issueRouter.post('/:issueId/resolve', validate(resolveIssueSchema), resolveIssueHandler);
+
+/**
+ * GET /api/issues/:issueId/assignments
+ * Retrieve assignment history for an issue
+ */
+issueRouter.get('/:issueId/assignments', getAssignmentsHandler);
+
+/**
+ * GET /api/issues/:issueId/status-history
+ * Retrieve status transition audit history for an issue
+ */
+issueRouter.get('/:issueId/status-history', getStatusHistoryHandler);
 
 /**
  * POST /api/issues/:issueId/comments

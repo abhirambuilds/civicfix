@@ -39,6 +39,11 @@ async function runIssueTests() {
   const SRM_ORG_ID = 'a0000000-0000-0000-0000-000000000001';
   const UNRELATED_ORG_ID = 'a0000000-0000-0000-0000-000000000099';
 
+  // Seeded Department IDs
+  const CIVIL_DEPT_ID = 'b0000000-0000-0000-0000-000000000001';
+  const ELECTRICAL_DEPT_ID = 'b0000000-0000-0000-0000-000000000002';
+  const UNRELATED_DEPT_ID = 'b0000000-0000-0000-0000-000000000099';
+
   // Seeded Categories
   const POTHOLE_CAT_ID = 'c0000000-0000-0000-0000-000000000001'; // Default: HIGH
   const STREETLIGHT_CAT_ID = 'c0000000-0000-0000-0000-000000000002'; // Default: MEDIUM
@@ -516,27 +521,398 @@ async function runIssueTests() {
     assert(!categoriesJson.data[0]?.routingRules, 'Security: Routing rules not exposed');
 
     // ============================================================================
-    // SUITE 10: PRESERVATION OF PROMPTS 1-8 ENDPOINTS
+    // SUITE 11: ISSUE STATUS TRANSITIONS & LIFECYCLE STATE MACHINE
     // ============================================================================
-    console.log('\n[Suite 10] Preservation of Prompts 1-8 Endpoints');
+    console.log('\n[Suite 11] Issue Status Transitions & Lifecycle State Machine');
 
-    // 10.1 GET /api/health
+    // Create a dedicated issue for lifecycle transitions
+    const wfIssueRes = await fetch(`${baseUrl}/api/issues`, {
+      method: 'POST',
+      headers: authHeader(user1Token),
+      body: JSON.stringify({
+        title: 'Broken water fountain near library block',
+        description: 'Water fountain pressure valve is defective and leaking continuously on the floor.',
+        categoryId: POTHOLE_CAT_ID,
+        latitude: 12.823,
+        longitude: 80.044,
+      }),
+    });
+    const wfIssueJson = (await wfIssueRes.json()) as any;
+    const wfIssueId = wfIssueJson.data?.id;
+    assert(Boolean(wfIssueId), 'Created test issue for workflow lifecycle testing');
+
+    // 11.1 Normal USER attempts status change -> 403 Forbidden
+    const userStatusRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(user1Token),
+      body: JSON.stringify({ status: 'UNDER_REVIEW' }),
+    });
+    assert(userStatusRes.status === 403, 'Permission Guard: Normal USER cannot change issue status (403 Forbidden)');
+
+    // 11.2 Duplicate status update (REPORTED -> REPORTED) -> 400 Bad Request
+    const duplicateStatusRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ status: 'REPORTED' }),
+    });
+    assert(duplicateStatusRes.status === 400, 'Duplicate Status Guard: REPORTED -> REPORTED rejected (400 Bad Request)');
+
+    // 11.3 Invalid transition jump (REPORTED -> CLOSED) -> 400 Bad Request
+    const invalidJumpRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ status: 'CLOSED' }),
+    });
+    assert(invalidJumpRes.status === 400, 'Lifecycle Guard: Direct jump REPORTED -> CLOSED rejected (400 Bad Request)');
+
+    // 11.4 Malformed status enum -> 400 Bad Request
+    const badStatusEnumRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ status: 'COMPLETED_SUCCESSFULLY' }),
+    });
+    assert(badStatusEnumRes.status === 400, 'Validation: Malformed status enum rejected (400 Bad Request)');
+
+    // 11.5 Valid transition: REPORTED -> UNDER_REVIEW by ORG_ADMIN -> 200 OK
+    const underReviewRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ status: 'UNDER_REVIEW', remark: 'Triage team reviewing library fountain report.' }),
+    });
+    const underReviewJson = (await underReviewRes.json()) as any;
+    assert(underReviewRes.status === 200, 'Valid Transition: REPORTED -> UNDER_REVIEW succeeded (200 OK)');
+    assert(underReviewJson.data?.status === 'UNDER_REVIEW', 'Issue status updated to UNDER_REVIEW');
+
+    // 11.6 STAFF cannot close issue -> 403 Forbidden
+    const staffCloseRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(staffToken),
+      body: JSON.stringify({ status: 'CLOSED' }),
+    });
+    assert(staffCloseRes.status === 403, 'Authority Guard: STAFF forbidden from closing issue (403 Forbidden)');
+
+    // 11.7 Valid transition: UNDER_REVIEW -> ASSIGNED -> 200 OK
+    const toAssignedRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ status: 'ASSIGNED', remark: 'Assigned to plumbing team.' }),
+    });
+    assert(toAssignedRes.status === 200, 'Valid Transition: UNDER_REVIEW -> ASSIGNED succeeded (200 OK)');
+
+    // 11.8 Valid transition: ASSIGNED -> IN_PROGRESS -> 200 OK
+    const toInProgressRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ status: 'IN_PROGRESS', remark: 'Technician on-site repairing fountain.' }),
+    });
+    assert(toInProgressRes.status === 200, 'Valid Transition: ASSIGNED -> IN_PROGRESS succeeded (200 OK)');
+
+    // 11.9 Valid transition: IN_PROGRESS -> RESOLVED -> 200 OK
+    const toResolvedRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ status: 'RESOLVED', remark: 'Pressure valve replaced successfully.' }),
+    });
+    assert(toResolvedRes.status === 200, 'Valid Transition: IN_PROGRESS -> RESOLVED succeeded (200 OK)');
+
+    // 11.10 Valid transition: RESOLVED -> CLOSED -> 200 OK
+    const toClosedRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ status: 'CLOSED', remark: 'Resolution verified by campus supervisor.' }),
+    });
+    assert(toClosedRes.status === 200, 'Valid Transition: RESOLVED -> CLOSED succeeded (200 OK)');
+
+    // 11.11 Backward transition: CLOSED -> IN_PROGRESS by ORG_OWNER -> 200 OK
+    const reopenRes = await fetch(`${baseUrl}/api/issues/${wfIssueId}/status`, {
+      method: 'PATCH',
+      headers: authHeader(orgOwnerToken),
+      body: JSON.stringify({ status: 'IN_PROGRESS', remark: 'Reopened: fountain valve leaking again.' }),
+    });
+    assert(reopenRes.status === 200, 'Reopen: CLOSED -> IN_PROGRESS authorized for ORG_OWNER (200 OK)');
+
+    // ============================================================================
+    // SUITE 12: ISSUE ASSIGNMENT & REASSIGNMENT
+    // ============================================================================
+    console.log('\n[Suite 12] Issue Assignment & Reassignment');
+
+    // Create a fresh issue for assignment tests
+    const asgnIssueRes = await fetch(`${baseUrl}/api/issues`, {
+      method: 'POST',
+      headers: authHeader(user1Token),
+      body: JSON.stringify({
+        title: 'Exposed electrical wires in corridor B',
+        description: 'Exposed high voltage wiring hanging loose in main academic corridor B.',
+        categoryId: STREETLIGHT_CAT_ID,
+        latitude: 12.8235,
+        longitude: 80.0445,
+      }),
+    });
+    const asgnIssueJson = (await asgnIssueRes.json()) as any;
+    const asgnIssueId = asgnIssueJson.data?.id;
+    assert(Boolean(asgnIssueId), 'Created test issue for assignment testing');
+
+    // 12.1 Normal USER cannot assign issues -> 403 Forbidden
+    const userAssignRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assign`, {
+      method: 'POST',
+      headers: authHeader(user1Token),
+      body: JSON.stringify({ departmentId: CIVIL_DEPT_ID }),
+    });
+    assert(userAssignRes.status === 403, 'Permission Guard: USER cannot assign issues (403 Forbidden)');
+
+    // 12.2 Normal STAFF cannot assign issues -> 403 Forbidden
+    const staffAssignRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assign`, {
+      method: 'POST',
+      headers: authHeader(staffToken),
+      body: JSON.stringify({ departmentId: CIVIL_DEPT_ID }),
+    });
+    assert(staffAssignRes.status === 403, 'Permission Guard: STAFF cannot assign issues (403 Forbidden)');
+
+    // 12.3 Department not found -> 404 Not Found
+    const notFoundDeptRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assign`, {
+      method: 'POST',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ departmentId: '00000000-0000-0000-0000-000000000000' }),
+    });
+    assert(notFoundDeptRes.status === 404, 'Validation: Non-existent department returns 404 Not Found');
+
+    // 12.4 Cross-Organization guard: Department from unrelated organization -> 400 Bad Request
+    const crossOrgAssignRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assign`, {
+      method: 'POST',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ departmentId: UNRELATED_DEPT_ID }),
+    });
+    assert(crossOrgAssignRes.status === 400, 'Tenant Isolation Guard: Cross-org department assignment rejected (400 Bad Request)');
+
+    // 12.5 Staff membership guard: Staff user not belonging to target department -> 400 Bad Request
+    const staffDeptMismatchRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assign`, {
+      method: 'POST',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ departmentId: CIVIL_DEPT_ID, userId: STAFF_ID }), // STAFF_ID is in Electrical, not Civil
+    });
+    assert(staffDeptMismatchRes.status === 400, 'Department Guard: Assigning staff not in target department rejected (400 Bad Request)');
+
+    // 12.6 Manager department scope guard: Manager cannot assign outside their department -> 403 Forbidden
+    const managerCrossDeptRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assign`, {
+      method: 'POST',
+      headers: authHeader(managerToken), // Manager is in Civil
+      body: JSON.stringify({ departmentId: ELECTRICAL_DEPT_ID }),
+    });
+    assert(managerCrossDeptRes.status === 403, 'Department Isolation Guard: Manager cannot assign outside own department (403 Forbidden)');
+
+    // 12.7 Valid Assignment: ORG_ADMIN assigns issue to Civil Dept + Manager -> 201 Created
+    const validAssignRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assign`, {
+      method: 'POST',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({
+        departmentId: CIVIL_DEPT_ID,
+        userId: MANAGER_ID,
+        notes: 'Assigned to Civil department manager for initial structural review.',
+      }),
+    });
+    const validAssignJson = (await validAssignRes.json()) as any;
+    assert(validAssignRes.status === 201, 'Valid Assignment: ORG_ADMIN assigns issue to Civil Dept (201 Created)');
+    assert(validAssignJson.data?.departmentId === CIVIL_DEPT_ID, 'Assignment records correct departmentId');
+    assert(validAssignJson.data?.assignedUserId === MANAGER_ID, 'Assignment records correct assignedUserId');
+    assert(validAssignJson.data?.isActive === true, 'New assignment marked isActive = true');
+
+    // 12.8 Auto-transition to ASSIGNED
+    const checkIssueStatusRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}`, {
+      headers: authHeader(orgAdminToken),
+    });
+    const checkIssueStatusJson = (await checkIssueStatusRes.json()) as any;
+    assert(checkIssueStatusJson.data?.status === 'ASSIGNED', 'Workflow Automation: Assigning issue auto-transitions status to ASSIGNED');
+
+    // 12.9 Reassignment: ORG_ADMIN reassigns issue to Electrical Dept + Staff -> 201 Created
+    const reassignRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assign`, {
+      method: 'POST',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({
+        departmentId: ELECTRICAL_DEPT_ID,
+        userId: STAFF_ID,
+        notes: 'Reassigned to Electrical specialist: wiring issue identified.',
+      }),
+    });
+    const reassignJson = (await reassignRes.json()) as any;
+    assert(reassignRes.status === 201, 'Reassignment: Reassigning issue to Electrical Dept succeeded (201 Created)');
+    assert(reassignJson.data?.departmentId === ELECTRICAL_DEPT_ID, 'Reassigned record points to Electrical Dept');
+    assert(reassignJson.data?.isActive === true, 'New reassigned record is active');
+
+    // 12.10 Assignment History: Both records preserved, previous deactivated
+    const getAssignmentsRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assignments`, {
+      headers: authHeader(orgAdminToken),
+    });
+    const getAssignmentsJson = (await getAssignmentsRes.json()) as any;
+    assert(getAssignmentsRes.status === 200, 'GET /api/issues/:id/assignments returns 200 OK');
+    assert(Array.isArray(getAssignmentsJson.data), 'Assignments returned as array');
+    assert(getAssignmentsJson.data?.length === 2, 'Assignment History: Both historical records preserved (length = 2)');
+    const latest = getAssignmentsJson.data?.[0];
+    const previous = getAssignmentsJson.data?.[1];
+    assert(latest?.isActive === true, 'Latest assignment is active');
+    assert(previous?.isActive === false, 'Previous assignment deactivated (isActive = false)');
+
+    // ============================================================================
+    // SUITE 13: PRIORITY MANAGEMENT
+    // ============================================================================
+    console.log('\n[Suite 13] Priority Management');
+
+    // 13.1 Normal USER cannot update priority -> 403 Forbidden
+    const userPatchPriorityRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/priority`, {
+      method: 'PATCH',
+      headers: authHeader(user1Token),
+      body: JSON.stringify({ priority: 'CRITICAL' }),
+    });
+    assert(userPatchPriorityRes.status === 403, 'Permission Guard: USER cannot update issue priority (403 Forbidden)');
+
+    // 13.2 Normal STAFF cannot update priority -> 403 Forbidden
+    const staffPriorityRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/priority`, {
+      method: 'PATCH',
+      headers: authHeader(staffToken),
+      body: JSON.stringify({ priority: 'CRITICAL' }),
+    });
+    assert(staffPriorityRes.status === 403, 'Permission Guard: STAFF cannot update issue priority (403 Forbidden)');
+
+    // 13.3 Invalid priority enum -> 400 Bad Request
+    const invalidPriorityRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/priority`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ priority: 'URGENT' }),
+    });
+    assert(invalidPriorityRes.status === 400, 'Validation: Arbitrary priority "URGENT" rejected (400 Bad Request)');
+
+    // 13.4 ORG_ADMIN updates priority to CRITICAL -> 200 OK
+    const updatePriorityRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/priority`, {
+      method: 'PATCH',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ priority: 'CRITICAL', remark: 'Immediate hazard to students in corridor B.' }),
+    });
+    const updatePriorityJson = (await updatePriorityRes.json()) as any;
+    assert(updatePriorityRes.status === 200, 'ORG_ADMIN updates priority to CRITICAL (200 OK)');
+    assert(updatePriorityJson.data?.priority === 'CRITICAL', 'Issue priority updated to CRITICAL');
+
+    // 13.5 Priority remark stored as internal comment
+    const priorityCommentsRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/comments`, {
+      headers: authHeader(orgAdminToken),
+    });
+    const priorityCommentsJson = (await priorityCommentsRes.json()) as any;
+    const hasPriorityRemark = priorityCommentsJson.data?.some((c: any) =>
+      c.commentText?.includes('Priority updated to CRITICAL') && c.isInternal === true
+    );
+    assert(hasPriorityRemark, 'Priority remark stored as internal audit comment');
+
+    // 13.6 Manager updates priority for issue in own department -> 200 OK
+    // POTHOLE_ISSUE_ID is assigned to Civil Dept, where MANAGER_ID is manager
+    const managerPriorityRes = await fetch(`${baseUrl}/api/issues/${POTHOLE_ISSUE_ID}/priority`, {
+      method: 'PATCH',
+      headers: authHeader(managerToken),
+      body: JSON.stringify({ priority: 'MEDIUM', remark: 'Temporarily barricaded, priority adjusted.' }),
+    });
+    assert(managerPriorityRes.status === 200, 'Department Scope: Manager updates priority in own department (200 OK)');
+
+    // 13.7 Manager denied from updating priority for issue outside own department -> 403 Forbidden
+    // asgnIssueId was reassigned to Electrical Dept (MANAGER is Civil manager)
+    const managerCrossPriorityRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/priority`, {
+      method: 'PATCH',
+      headers: authHeader(managerToken),
+      body: JSON.stringify({ priority: 'LOW' }),
+    });
+    assert(managerCrossPriorityRes.status === 403, 'Department Isolation Guard: Manager denied updating priority outside department (403)');
+
+    // ============================================================================
+    // SUITE 14: ISSUE RESOLUTION & CLOSURE
+    // ============================================================================
+    console.log('\n[Suite 14] Issue Resolution & Closure');
+
+    // 14.1 Normal USER cannot resolve issue -> 403 Forbidden
+    const userResolveRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/resolve`, {
+      method: 'POST',
+      headers: authHeader(user1Token),
+      body: JSON.stringify({ remark: 'Fixed it myself.' }),
+    });
+    assert(userResolveRes.status === 403, 'Permission Guard: Normal USER cannot resolve issues (403 Forbidden)');
+
+    // 14.2 Authorized Resolution: ORG_ADMIN resolves issue -> 200 OK
+    const resolveRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/resolve`, {
+      method: 'POST',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ remark: 'All loose wiring was safely enclosed in protective conduit.' }),
+    });
+    const resolveJson = (await resolveRes.json()) as any;
+    assert(resolveRes.status === 200, 'Authorized Resolution: ORG_ADMIN resolves issue (200 OK)');
+    assert(resolveJson.data?.status === 'RESOLVED', 'Issue status is now RESOLVED');
+    assert(Boolean(resolveJson.data?.resolvedAt), 'resolvedAt timestamp recorded');
+
+    // 14.3 Cannot resolve already resolved issue -> 400 Bad Request
+    const duplicateResolveRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/resolve`, {
+      method: 'POST',
+      headers: authHeader(orgAdminToken),
+      body: JSON.stringify({ remark: 'Trying to resolve again.' }),
+    });
+    assert(duplicateResolveRes.status === 400, 'Lifecycle Guard: Resolving already resolved issue rejected (400 Bad Request)');
+
+    // 14.4 Resolution remark added as public issue comment
+    const resolutionCommentsRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/comments`, {
+      headers: authHeader(user1Token), // Reporter can see public resolution comment
+    });
+    const resolutionCommentsJson = (await resolutionCommentsRes.json()) as any;
+    const hasResolutionComment = resolutionCommentsJson.data?.some((c: any) =>
+      c.commentText?.includes('All loose wiring was safely enclosed in protective conduit.')
+    );
+    assert(hasResolutionComment, 'Resolution remark added as accessible comment for reporter');
+
+    // ============================================================================
+    // SUITE 15: STATUS HISTORY & ASSIGNMENT AUDIT LOGS
+    // ============================================================================
+    console.log('\n[Suite 15] Status History & Assignment Audit Logs');
+
+    // 15.1 GET /api/issues/:id/status-history returns complete audit log -> 200 OK
+    const statusHistRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/status-history`, {
+      headers: authHeader(orgAdminToken),
+    });
+    const statusHistJson = (await statusHistRes.json()) as any;
+    assert(statusHistRes.status === 200, 'GET /api/issues/:id/status-history returns 200 OK');
+    assert(Array.isArray(statusHistJson.data), 'Status history returned as array');
+    assert(statusHistJson.data?.length >= 3, 'Status history tracks initial creation, assignment, and resolution');
+    assert(statusHistJson.data?.some((h: any) => h.newStatus === 'RESOLVED'), 'History records transition to RESOLVED');
+
+    // 15.2 Status history includes changedBy user info
+    const lastHist = statusHistJson.data?.[statusHistJson.data.length - 1];
+    assert(Boolean(lastHist?.changedBy?.name || lastHist?.changedById), 'Status history contains actor information');
+
+    // 15.3 IDOR Security: Unrelated USER 2 denied from viewing history of USER 1 private issue -> 403 Forbidden
+    const idorHistRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/status-history`, {
+      headers: authHeader(user2Token),
+    });
+    assert(idorHistRes.status === 403, 'IDOR Guard: Unrelated USER cannot access status history (403 Forbidden)');
+
+    // 15.4 IDOR Security: Unrelated USER 2 denied from viewing assignments of USER 1 private issue -> 403 Forbidden
+    const idorAsgnRes = await fetch(`${baseUrl}/api/issues/${asgnIssueId}/assignments`, {
+      headers: authHeader(user2Token),
+    });
+    assert(idorAsgnRes.status === 403, 'IDOR Guard: Unrelated USER cannot access assignment history (403 Forbidden)');
+
+    // ============================================================================
+    // SUITE 16: PRESERVATION OF PROMPTS 1-8 ENDPOINTS
+    // ============================================================================
+    console.log('\n[Suite 16] Preservation of Prompts 1-8 Endpoints');
+
+    // 16.1 GET /api/health
     const healthRes = await fetch(`${baseUrl}/api/health`);
     assert(healthRes.status === 200, 'GET /api/health continues to return 200 OK');
 
-    // 10.2 GET /api/auth/me
+    // 16.2 GET /api/auth/me
     const meRes = await fetch(`${baseUrl}/api/auth/me`, {
       headers: authHeader(user1Token),
     });
     assert(meRes.status === 200, 'GET /api/auth/me continues to return 200 OK');
 
-    // 10.3 GET /api/organizations
+    // 16.3 GET /api/organizations
     const orgsRes = await fetch(`${baseUrl}/api/organizations`, {
       headers: authHeader(platformAdminToken),
     });
     assert(orgsRes.status === 200, 'GET /api/organizations continues to return 200 OK');
 
-    // 10.4 GET /api/organizations/:id/departments
+    // 16.4 GET /api/organizations/:id/departments
     const deptsRes = await fetch(`${baseUrl}/api/organizations/${SRM_ORG_ID}/departments`, {
       headers: authHeader(orgAdminToken),
     });
@@ -555,7 +931,7 @@ async function runIssueTests() {
     console.error(` ${failed} TESTS FAILED!`);
     process.exit(1);
   } else {
-    console.log(' ALL 45+ CORE CIVIC ISSUE API & SECURITY TESTS PASSED CLEANLY!');
+    console.log(' ALL 128 ISSUE CORE, WORKFLOW, ASSIGNMENT & SECURITY TESTS PASSED CLEANLY!');
     console.log('================================================================\n');
   }
 }

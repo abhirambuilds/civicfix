@@ -60,6 +60,38 @@ export const createCommentSchema = z
   })
   .strict();
 
+export const updateStatusSchema = z
+  .object({
+    status: z.nativeEnum(IssueStatus),
+    remark: z.string().trim().max(1000, 'Remark cannot exceed 1000 characters').optional().nullable(),
+  })
+  .strict();
+
+export const updatePrioritySchema = z
+  .object({
+    priority: z.nativeEnum(IssuePriority),
+    remark: z.string().trim().max(1000, 'Remark cannot exceed 1000 characters').optional().nullable(),
+  })
+  .strict();
+
+export const assignIssueSchema = z
+  .object({
+    departmentId: z.string().regex(UUID_REGEX, 'departmentId must be a valid UUID'),
+    userId: z.string().regex(UUID_REGEX, 'userId must be a valid UUID').optional().nullable(),
+    notes: z.string().trim().max(1000, 'Notes cannot exceed 1000 characters').optional().nullable(),
+  })
+  .strict();
+
+export const resolveIssueSchema = z
+  .object({
+    remark: z.string().trim().max(2000, 'Remark cannot exceed 2000 characters').optional().nullable(),
+  })
+  .strict();
+
 export type CreateIssueInput = z.infer<typeof createIssueSchema>;
 export type IssueQueryInput = z.infer<typeof issueQuerySchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
+export type UpdateStatusInput = z.infer<typeof updateStatusSchema>;
+export type UpdatePriorityInput = z.infer<typeof updatePrioritySchema>;
+export type AssignIssueInput = z.infer<typeof assignIssueSchema>;
+export type ResolveIssueInput = z.infer<typeof resolveIssueSchema>;

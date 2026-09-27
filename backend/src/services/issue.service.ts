@@ -9,6 +9,10 @@ import {
   CreateIssueInput,
   IssueQueryInput,
   CreateCommentInput,
+  UpdateStatusInput,
+  UpdatePriorityInput,
+  AssignIssueInput,
+  ResolveIssueInput,
 } from '../validators/issue.validator.js';
 import { ServiceResult } from './auth.service.js';
 import {
@@ -17,6 +21,7 @@ import {
   getUserDepartmentMembership,
   registerSeededIssue,
 } from './rbac.service.js';
+import { checkUserOrgMembership } from './organization.service.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1527,4 +1532,879 @@ export async function listIssueCategories(
     data: categories,
     statusCode: 200,
   };
+}
+
+// ==============================================================================
+// ISSUE WORKFLOW IMPLEMENTATIONS
+// ==============================================================================
+
+const VALID_TRANSITIONS: Record<IssueStatus, IssueStatus[]> = {
+  [IssueStatus.REPORTED]: [IssueStatus.UNDER_REVIEW, IssueStatus.ASSIGNED],
+  [IssueStatus.UNDER_REVIEW]: [IssueStatus.ASSIGNED, IssueStatus.IN_PROGRESS],
+  [IssueStatus.ASSIGNED]: [IssueStatus.IN_PROGRESS, IssueStatus.UNDER_REVIEW],
+  [IssueStatus.IN_PROGRESS]: [IssueStatus.RESOLVED, IssueStatus.UNDER_REVIEW],
+  [IssueStatus.RESOLVED]: [IssueStatus.CLOSED, IssueStatus.IN_PROGRESS],
+  [IssueStatus.CLOSED]: [IssueStatus.IN_PROGRESS, IssueStatus.UNDER_REVIEW],
+};
+
+/**
+ * 7. Update Issue Status with transition validation, status history, and role checks.
+ */
+export async function updateIssueStatus(
+  userId: string,
+  userRole: UserRole,
+  issueId: string,
+  input: UpdateStatusInput,
+  db = prisma
+): Promise<ServiceResult<any>> {
+  if (!isValidUuid(issueId)) {
+    return { success: false, error: 'Invalid issue ID parameter.', statusCode: 400 };
+  }
+
+  // 1. Citizen USER cannot change status
+  if (userRole === UserRole.USER) {
+    return { success: false, error: 'Forbidden: Normal users cannot change issue status.', statusCode: 403 };
+  }
+
+  // 2. Fetch issue to verify existence and current status
+  let issue: { id: string; organizationId: string; status: IssueStatus; assignments: any[] } | null = null;
+
+  if (hasDbUrl()) {
+    try {
+      issue = await db.issue.findUnique({
+        where: { id: issueId },
+        select: {
+          id: true,
+          organizationId: true,
+          status: true,
+          assignments: { where: { isActive: true }, select: { departmentId: true, assignedUserId: true } },
+        },
+      });
+    } catch {
+      // Fallback
+    }
+  }
+
+  if (!issue) {
+    const mock = MOCK_ISSUES.get(issueId);
+    if (mock) {
+      issue = {
+        id: mock.id,
+        organizationId: mock.organizationId,
+        status: mock.status,
+        assignments: MOCK_ASSIGNMENTS.get(issueId)?.filter((a) => a.isActive) || [],
+      };
+    }
+  }
+
+  if (!issue) {
+    return { success: false, error: 'Issue not found.', statusCode: 404 };
+  }
+
+  // 3. Role authorization check
+  if (userRole === UserRole.ORG_OWNER || userRole === UserRole.ORG_ADMIN) {
+    const orgMem = await getUserOrganizationMembership(userId, issue.organizationId, db);
+    if (!orgMem || (orgMem.orgRole !== OrgMemberRole.OWNER && orgMem.orgRole !== OrgMemberRole.ADMIN)) {
+      return { success: false, error: 'Forbidden: You do not have administrative access to this organization.', statusCode: 403 };
+    }
+  } else if (userRole === UserRole.MANAGER) {
+    // Must be assigned to manager's department
+    const assignedDeptIds = issue.assignments.map((a) => a.departmentId).filter(Boolean);
+    let managerPermitted = false;
+    for (const dId of assignedDeptIds) {
+      const deptMem = await getUserDepartmentMembership(userId, dId, db);
+      if (deptMem) {
+        managerPermitted = true;
+        break;
+      }
+    }
+    if (!managerPermitted) {
+      return { success: false, error: 'Forbidden: You can only update status for issues assigned to your department.', statusCode: 403 };
+    }
+  } else if (userRole === UserRole.STAFF) {
+    // Staff cannot close issues
+    if (input.status === IssueStatus.CLOSED) {
+      return { success: false, error: 'Forbidden: Only organization administrators or managers can close an issue.', statusCode: 403 };
+    }
+    // Must be assigned to user or department
+    const isAssigned = issue.assignments.some((a) => a.assignedUserId === userId);
+    let deptAssigned = false;
+    for (const a of issue.assignments) {
+      if (a.departmentId) {
+        const deptMem = await getUserDepartmentMembership(userId, a.departmentId, db);
+        if (deptMem) {
+          deptAssigned = true;
+          break;
+        }
+      }
+    }
+    if (!isAssigned && !deptAssigned) {
+      return { success: false, error: 'Forbidden: You are not assigned to this issue.', statusCode: 403 };
+    }
+  }
+
+  // 4. Duplicate status check
+  if (issue.status === input.status) {
+    return { success: false, error: `Issue is already in ${input.status} status.`, statusCode: 400 };
+  }
+
+  // 5. Valid status transition check
+  const allowedNext = VALID_TRANSITIONS[issue.status] || [];
+  if (!allowedNext.includes(input.status)) {
+    return {
+      success: false,
+      error: `Invalid status transition from ${issue.status} to ${input.status}.`,
+      statusCode: 400,
+    };
+  }
+
+  const previousStatus = issue.status;
+  const now = new Date();
+
+  // 6. Database Execution
+  if (hasDbUrl()) {
+    try {
+      const updated = await db.$transaction(async (tx) => {
+        const updatedIssue = await tx.issue.update({
+          where: { id: issueId },
+          data: {
+            status: input.status,
+            closedAt: input.status === IssueStatus.CLOSED ? now : undefined,
+            resolvedAt: input.status === IssueStatus.RESOLVED ? now : undefined,
+          },
+          include: {
+            category: true,
+            location: true,
+            assignments: { where: { isActive: true }, include: { department: true, assignedUser: true } },
+            reporter: { select: { id: true, name: true, email: true } },
+          },
+        });
+
+        await tx.issueStatusHistory.create({
+          data: {
+            issueId,
+            previousStatus,
+            newStatus: input.status,
+            changedById: userId,
+            remark: input.remark || `Status changed to ${input.status}.`,
+          },
+        });
+
+        if (input.remark && input.remark.trim() !== '') {
+          await tx.issueComment.create({
+            data: {
+              issueId,
+              authorId: userId,
+              commentText: input.remark,
+              isInternal: false,
+            },
+          });
+        }
+
+        return updatedIssue;
+      });
+
+      return { success: true, data: updated, statusCode: 200 };
+    } catch {
+      // Fallback
+    }
+  }
+
+  // 7. In-Memory Fallback
+  const mockIssue = MOCK_ISSUES.get(issueId)!;
+  mockIssue.status = input.status;
+  mockIssue.updatedAt = now;
+  if (input.status === IssueStatus.CLOSED) mockIssue.closedAt = now;
+  if (input.status === IssueStatus.RESOLVED) mockIssue.resolvedAt = now;
+
+  const statusHistList = MOCK_STATUS_HISTORIES.get(issueId) || [];
+  statusHistList.push({
+    id: `hist-${Date.now().toString(36)}`,
+    issueId,
+    previousStatus,
+    newStatus: input.status,
+    changedById: userId,
+    remark: input.remark || `Status changed to ${input.status}.`,
+    createdAt: now,
+  });
+  MOCK_STATUS_HISTORIES.set(issueId, statusHistList);
+
+  if (input.remark && input.remark.trim() !== '') {
+    const commentsList = MOCK_COMMENTS.get(issueId) || [];
+    commentsList.push({
+      id: `comm-${Date.now().toString(36)}`,
+      issueId,
+      authorId: userId,
+      commentText: input.remark,
+      isInternal: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    MOCK_COMMENTS.set(issueId, commentsList);
+  }
+
+  return {
+    success: true,
+    data: {
+      ...mockIssue,
+      category: MOCK_CATEGORIES.get(mockIssue.categoryId),
+      location: MOCK_LOCATIONS.get(issueId),
+      assignments: MOCK_ASSIGNMENTS.get(issueId) || [],
+      reporter: MOCK_USERS.get(mockIssue.reporterId),
+    },
+    statusCode: 200,
+  };
+}
+
+/**
+ * 8. Assign Issue to a Department and optional Staff member.
+ * Preserves assignment history and automatically advances status to ASSIGNED.
+ */
+export async function assignIssue(
+  userId: string,
+  userRole: UserRole,
+  issueId: string,
+  input: AssignIssueInput,
+  db = prisma
+): Promise<ServiceResult<any>> {
+  if (!isValidUuid(issueId)) {
+    return { success: false, error: 'Invalid issue ID parameter.', statusCode: 400 };
+  }
+
+  // 1. Role Authorization
+  if (userRole === UserRole.USER || userRole === UserRole.STAFF) {
+    return { success: false, error: 'Forbidden: You do not have permission to assign issues.', statusCode: 403 };
+  }
+
+  // 2. Fetch Issue
+  let issue: { id: string; organizationId: string; status: IssueStatus } | null = null;
+  if (hasDbUrl()) {
+    try {
+      issue = await db.issue.findUnique({
+        where: { id: issueId },
+        select: { id: true, organizationId: true, status: true },
+      });
+    } catch {}
+  }
+  if (!issue) {
+    const mock = MOCK_ISSUES.get(issueId);
+    if (mock) {
+      issue = { id: mock.id, organizationId: mock.organizationId, status: mock.status };
+    }
+  }
+  if (!issue) {
+    return { success: false, error: 'Issue not found.', statusCode: 404 };
+  }
+
+  // 3. Organization admin check
+  if (userRole === UserRole.ORG_OWNER || userRole === UserRole.ORG_ADMIN) {
+    const orgMem = await getUserOrganizationMembership(userId, issue.organizationId, db);
+    if (!orgMem || (orgMem.orgRole !== OrgMemberRole.OWNER && orgMem.orgRole !== OrgMemberRole.ADMIN)) {
+      return { success: false, error: 'Forbidden: You do not have administrative access to this organization.', statusCode: 403 };
+    }
+  }
+
+  // 4. Department Manager scope check
+  if (userRole === UserRole.MANAGER) {
+    const managerDeptMem = await getUserDepartmentMembership(userId, input.departmentId, db);
+    if (!managerDeptMem) {
+      return { success: false, error: 'Forbidden: Managers can only assign issues within their own department.', statusCode: 403 };
+    }
+  }
+
+  // 5. Department Validation (exists, active, belongs to issue.organizationId)
+  let department: { id: string; organizationId: string; isActive: boolean; name: string } | null = null;
+  if (hasDbUrl()) {
+    try {
+      department = await db.department.findUnique({
+        where: { id: input.departmentId },
+        select: { id: true, organizationId: true, isActive: true, name: true },
+      });
+    } catch {}
+  }
+  if (!department) {
+    // In-memory seeded departments
+    const SEEDED_DEPTS_MAP: Record<string, { organizationId: string; name: string; isActive: boolean }> = {
+      'b0000000-0000-0000-0000-000000000001': { organizationId: 'a0000000-0000-0000-0000-000000000001', name: 'Civil / Infrastructure', isActive: true },
+      'b0000000-0000-0000-0000-000000000002': { organizationId: 'a0000000-0000-0000-0000-000000000001', name: 'Electrical', isActive: true },
+      'b0000000-0000-0000-0000-000000000003': { organizationId: 'a0000000-0000-0000-0000-000000000001', name: 'Sanitation & Waste', isActive: true },
+      'b0000000-0000-0000-0000-000000000004': { organizationId: 'a0000000-0000-0000-0000-000000000001', name: 'Water & Drainage', isActive: true },
+      'b0000000-0000-0000-0000-000000000005': { organizationId: 'a0000000-0000-0000-0000-000000000001', name: 'General Maintenance', isActive: true },
+      'b0000000-0000-0000-0000-000000000099': { organizationId: 'a0000000-0000-0000-0000-000000000099', name: 'Unrelated City Works', isActive: true },
+    };
+    const mockDept = SEEDED_DEPTS_MAP[input.departmentId];
+    if (mockDept) {
+      department = { id: input.departmentId, ...mockDept };
+    }
+  }
+
+  if (!department || !department.isActive) {
+    return { success: false, error: 'Department not found or is inactive.', statusCode: 404 };
+  }
+
+  // Cross-tenant guard: Department must belong to the issue's organization
+  if (department.organizationId !== issue.organizationId) {
+    return { success: false, error: "Department does not belong to the issue's organization.", statusCode: 400 };
+  }
+
+  // 6. Target Staff User validation (if provided)
+  if (input.userId) {
+    // A. User belongs to organization
+    const belongsToOrg = await checkUserOrgMembership(input.userId, issue.organizationId, db);
+    if (!belongsToOrg) {
+      return { success: false, error: 'Target user does not belong to this organization.', statusCode: 400 };
+    }
+
+    // B. User belongs to target department
+    const deptMem = await getUserDepartmentMembership(input.userId, input.departmentId, db);
+    if (!deptMem) {
+      return { success: false, error: 'Target user is not an active member of the target department.', statusCode: 400 };
+    }
+  }
+
+  // 7. Atomic Assignment + Auto Status Transition
+  const now = new Date();
+  const shouldAutoAssign = issue.status === IssueStatus.REPORTED || issue.status === IssueStatus.UNDER_REVIEW;
+  const previousStatus = issue.status;
+
+  if (hasDbUrl()) {
+    try {
+      const assignment = await db.$transaction(async (tx) => {
+        // Deactivate old active assignments
+        await tx.issueAssignment.updateMany({
+          where: { issueId, isActive: true },
+          data: { isActive: false },
+        });
+
+        // Create new assignment
+        const newAssignment = await tx.issueAssignment.create({
+          data: {
+            issueId,
+            departmentId: input.departmentId,
+            assignedUserId: input.userId || null,
+            assignedById: userId,
+            notes: input.notes || null,
+            isActive: true,
+          },
+          include: {
+            department: { select: { id: true, name: true, code: true } },
+            assignedUser: { select: { id: true, name: true, email: true } },
+            assignedBy: { select: { id: true, name: true, email: true } },
+          },
+        });
+
+        // Auto-transition to ASSIGNED if REPORTED or UNDER_REVIEW
+        if (shouldAutoAssign) {
+          await tx.issue.update({
+            where: { id: issueId },
+            data: { status: IssueStatus.ASSIGNED },
+          });
+
+          await tx.issueStatusHistory.create({
+            data: {
+              issueId,
+              previousStatus,
+              newStatus: IssueStatus.ASSIGNED,
+              changedById: userId,
+              remark: input.notes || `Assigned to ${department!.name} department.`,
+            },
+          });
+        }
+
+        if (input.notes && input.notes.trim() !== '') {
+          await tx.issueComment.create({
+            data: {
+              issueId,
+              authorId: userId,
+              commentText: `Assignment: ${input.notes}`,
+              isInternal: true,
+            },
+          });
+        }
+
+        return newAssignment;
+      });
+
+      return { success: true, data: assignment, statusCode: 201 };
+    } catch {
+      // Fallback
+    }
+  }
+
+  // In-Memory Fallback
+  const asgnList = MOCK_ASSIGNMENTS.get(issueId) || [];
+  asgnList.forEach((a) => { a.isActive = false; });
+
+  const newAsgnId = `asgn-${Date.now().toString(36)}`;
+  const newMockAsgn: MockAssignment = {
+    id: newAsgnId,
+    issueId,
+    departmentId: input.departmentId,
+    assignedUserId: input.userId || null,
+    assignedById: userId,
+    notes: input.notes || null,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+  asgnList.push(newMockAsgn);
+  MOCK_ASSIGNMENTS.set(issueId, asgnList);
+
+  // Update rbac SEEDED_ISSUES so subsequent rbac checks know about this assignment
+  registerSeededIssue(issueId, {
+    reporterId: (MOCK_ISSUES.get(issueId)?.reporterId) || 'f0000000-0000-0000-0000-000000000006',
+    organizationId: issue.organizationId,
+    assignments: asgnList.filter((a) => a.isActive).map((a) => ({
+      departmentId: a.departmentId!,
+      assignedUserId: a.assignedUserId!,
+    })),
+  });
+
+  const mockIssue = MOCK_ISSUES.get(issueId);
+  if (mockIssue && shouldAutoAssign) {
+    mockIssue.status = IssueStatus.ASSIGNED;
+    mockIssue.updatedAt = now;
+
+    const histList = MOCK_STATUS_HISTORIES.get(issueId) || [];
+    histList.push({
+      id: `hist-${Date.now().toString(36)}`,
+      issueId,
+      previousStatus,
+      newStatus: IssueStatus.ASSIGNED,
+      changedById: userId,
+      remark: input.notes || `Assigned to ${department.name} department.`,
+      createdAt: now,
+    });
+    MOCK_STATUS_HISTORIES.set(issueId, histList);
+  }
+
+  if (input.notes && input.notes.trim() !== '') {
+    const commentsList = MOCK_COMMENTS.get(issueId) || [];
+    commentsList.push({
+      id: `comm-${Date.now().toString(36)}`,
+      issueId,
+      authorId: userId,
+      commentText: `Assignment: ${input.notes}`,
+      isInternal: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    MOCK_COMMENTS.set(issueId, commentsList);
+  }
+
+  const assignedUser = input.userId ? MOCK_USERS.get(input.userId) : null;
+  const assignedBy = MOCK_USERS.get(userId);
+
+  return {
+    success: true,
+    data: {
+      ...newMockAsgn,
+      department: { id: department.id, name: department.name },
+      assignedUser: assignedUser ? { id: assignedUser.id, name: assignedUser.name, email: assignedUser.email } : null,
+      assignedBy: assignedBy ? { id: assignedBy.id, name: assignedBy.name, email: assignedBy.email } : null,
+    },
+    statusCode: 201,
+  };
+}
+
+/**
+ * 9. Update Issue Priority with authorization checks and optional remark.
+ */
+export async function updateIssuePriority(
+  userId: string,
+  userRole: UserRole,
+  issueId: string,
+  input: UpdatePriorityInput,
+  db = prisma
+): Promise<ServiceResult<any>> {
+  if (!isValidUuid(issueId)) {
+    return { success: false, error: 'Invalid issue ID parameter.', statusCode: 400 };
+  }
+
+  // 1. Authorization: USER and STAFF cannot update priority
+  if (userRole === UserRole.USER || userRole === UserRole.STAFF) {
+    return { success: false, error: 'Forbidden: Insufficient permissions to modify issue priority.', statusCode: 403 };
+  }
+
+  // 2. Fetch issue
+  let issue: { id: string; organizationId: string; priority: IssuePriority; assignments: any[] } | null = null;
+  if (hasDbUrl()) {
+    try {
+      issue = await db.issue.findUnique({
+        where: { id: issueId },
+        select: {
+          id: true,
+          organizationId: true,
+          priority: true,
+          assignments: { where: { isActive: true }, select: { departmentId: true } },
+        },
+      });
+    } catch {}
+  }
+  if (!issue) {
+    const mock = MOCK_ISSUES.get(issueId);
+    if (mock) {
+      issue = {
+        id: mock.id,
+        organizationId: mock.organizationId,
+        priority: mock.priority,
+        assignments: MOCK_ASSIGNMENTS.get(issueId)?.filter((a) => a.isActive) || [],
+      };
+    }
+  }
+  if (!issue) {
+    return { success: false, error: 'Issue not found.', statusCode: 404 };
+  }
+
+  // 3. Organization admin check
+  if (userRole === UserRole.ORG_OWNER || userRole === UserRole.ORG_ADMIN) {
+    const orgMem = await getUserOrganizationMembership(userId, issue.organizationId, db);
+    if (!orgMem || (orgMem.orgRole !== OrgMemberRole.OWNER && orgMem.orgRole !== OrgMemberRole.ADMIN)) {
+      return { success: false, error: 'Forbidden: You do not have administrative access to this organization.', statusCode: 403 };
+    }
+  }
+
+  // 4. Manager check (must be assigned to manager's department)
+  if (userRole === UserRole.MANAGER) {
+    const assignedDeptIds = issue.assignments.map((a) => a.departmentId).filter(Boolean);
+    let managerPermitted = false;
+    for (const dId of assignedDeptIds) {
+      const deptMem = await getUserDepartmentMembership(userId, dId, db);
+      if (deptMem) {
+        managerPermitted = true;
+        break;
+      }
+    }
+    if (!managerPermitted) {
+      return { success: false, error: 'Forbidden: Managers can only update priority for issues assigned to their department.', statusCode: 403 };
+    }
+  }
+
+  const now = new Date();
+
+  // 5. Database Execution
+  if (hasDbUrl()) {
+    try {
+      const updated = await db.$transaction(async (tx) => {
+        const updatedIssue = await tx.issue.update({
+          where: { id: issueId },
+          data: { priority: input.priority },
+          include: { category: true, location: true, reporter: { select: { id: true, name: true, email: true } } },
+        });
+
+        if (input.remark && input.remark.trim() !== '') {
+          await tx.issueComment.create({
+            data: {
+              issueId,
+              authorId: userId,
+              commentText: `Priority updated to ${input.priority}. ${input.remark}`,
+              isInternal: true,
+            },
+          });
+        }
+
+        return updatedIssue;
+      });
+
+      return { success: true, data: updated, statusCode: 200 };
+    } catch {}
+  }
+
+  // In-Memory Fallback
+  const mockIssue = MOCK_ISSUES.get(issueId)!;
+  mockIssue.priority = input.priority;
+  mockIssue.updatedAt = now;
+
+  if (input.remark && input.remark.trim() !== '') {
+    const commentsList = MOCK_COMMENTS.get(issueId) || [];
+    commentsList.push({
+      id: `comm-${Date.now().toString(36)}`,
+      issueId,
+      authorId: userId,
+      commentText: `Priority updated to ${input.priority}. ${input.remark}`,
+      isInternal: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    MOCK_COMMENTS.set(issueId, commentsList);
+  }
+
+  return {
+    success: true,
+    data: {
+      ...mockIssue,
+      category: MOCK_CATEGORIES.get(mockIssue.categoryId),
+      location: MOCK_LOCATIONS.get(issueId),
+      reporter: MOCK_USERS.get(mockIssue.reporterId),
+    },
+    statusCode: 200,
+  };
+}
+
+/**
+ * 10. Mark an issue as RESOLVED with resolution timestamp and remarks.
+ */
+export async function resolveIssue(
+  userId: string,
+  userRole: UserRole,
+  issueId: string,
+  input: ResolveIssueInput,
+  db = prisma
+): Promise<ServiceResult<any>> {
+  if (!isValidUuid(issueId)) {
+    return { success: false, error: 'Invalid issue ID parameter.', statusCode: 400 };
+  }
+
+  // 1. Authorization: USER cannot resolve issues
+  if (userRole === UserRole.USER) {
+    return { success: false, error: 'Forbidden: Normal users cannot resolve issues.', statusCode: 403 };
+  }
+
+  // 2. Fetch issue
+  let issue: { id: string; organizationId: string; status: IssueStatus; assignments: any[] } | null = null;
+  if (hasDbUrl()) {
+    try {
+      issue = await db.issue.findUnique({
+        where: { id: issueId },
+        select: {
+          id: true,
+          organizationId: true,
+          status: true,
+          assignments: { where: { isActive: true }, select: { departmentId: true, assignedUserId: true } },
+        },
+      });
+    } catch {}
+  }
+  if (!issue) {
+    const mock = MOCK_ISSUES.get(issueId);
+    if (mock) {
+      issue = {
+        id: mock.id,
+        organizationId: mock.organizationId,
+        status: mock.status,
+        assignments: MOCK_ASSIGNMENTS.get(issueId)?.filter((a) => a.isActive) || [],
+      };
+    }
+  }
+  if (!issue) {
+    return { success: false, error: 'Issue not found.', statusCode: 404 };
+  }
+
+  // State check: cannot resolve already resolved or closed issues
+  if (issue.status === IssueStatus.RESOLVED || issue.status === IssueStatus.CLOSED) {
+    return { success: false, error: 'Issue is already resolved or closed.', statusCode: 400 };
+  }
+
+  // 3. Organization admin check
+  if (userRole === UserRole.ORG_OWNER || userRole === UserRole.ORG_ADMIN) {
+    const orgMem = await getUserOrganizationMembership(userId, issue.organizationId, db);
+    if (!orgMem || (orgMem.orgRole !== OrgMemberRole.OWNER && orgMem.orgRole !== OrgMemberRole.ADMIN)) {
+      return { success: false, error: 'Forbidden: You do not have administrative access to this organization.', statusCode: 403 };
+    }
+  }
+
+  // 4. Manager / Staff scope check
+  if (userRole === UserRole.MANAGER || userRole === UserRole.STAFF) {
+    const isAssignedUser = issue.assignments.some((a) => a.assignedUserId === userId);
+    let isDeptMember = false;
+    for (const a of issue.assignments) {
+      if (a.departmentId) {
+        const mem = await getUserDepartmentMembership(userId, a.departmentId, db);
+        if (mem) {
+          isDeptMember = true;
+          break;
+        }
+      }
+    }
+    if (!isAssignedUser && !isDeptMember) {
+      return { success: false, error: 'Forbidden: You are not assigned to this issue or department.', statusCode: 403 };
+    }
+  }
+
+  const previousStatus = issue.status;
+  const now = new Date();
+
+  // 5. Database Execution
+  if (hasDbUrl()) {
+    try {
+      const updated = await db.$transaction(async (tx) => {
+        const updatedIssue = await tx.issue.update({
+          where: { id: issueId },
+          data: {
+            status: IssueStatus.RESOLVED,
+            resolvedAt: now,
+          },
+          include: { category: true, location: true, reporter: { select: { id: true, name: true, email: true } } },
+        });
+
+        await tx.issueStatusHistory.create({
+          data: {
+            issueId,
+            previousStatus,
+            newStatus: IssueStatus.RESOLVED,
+            changedById: userId,
+            remark: input.remark || 'Issue marked as resolved.',
+          },
+        });
+
+        if (input.remark && input.remark.trim() !== '') {
+          await tx.issueComment.create({
+            data: {
+              issueId,
+              authorId: userId,
+              commentText: input.remark,
+              isInternal: false,
+            },
+          });
+        }
+
+        return updatedIssue;
+      });
+
+      return { success: true, data: updated, statusCode: 200 };
+    } catch {}
+  }
+
+  // In-Memory Fallback
+  const mockIssue = MOCK_ISSUES.get(issueId)!;
+  mockIssue.status = IssueStatus.RESOLVED;
+  mockIssue.resolvedAt = now;
+  mockIssue.updatedAt = now;
+
+  const histList = MOCK_STATUS_HISTORIES.get(issueId) || [];
+  histList.push({
+    id: `hist-${Date.now().toString(36)}`,
+    issueId,
+    previousStatus,
+    newStatus: IssueStatus.RESOLVED,
+    changedById: userId,
+    remark: input.remark || 'Issue marked as resolved.',
+    createdAt: now,
+  });
+  MOCK_STATUS_HISTORIES.set(issueId, histList);
+
+  if (input.remark && input.remark.trim() !== '') {
+    const commentsList = MOCK_COMMENTS.get(issueId) || [];
+    commentsList.push({
+      id: `comm-${Date.now().toString(36)}`,
+      issueId,
+      authorId: userId,
+      commentText: input.remark,
+      isInternal: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    MOCK_COMMENTS.set(issueId, commentsList);
+  }
+
+  return {
+    success: true,
+    data: {
+      ...mockIssue,
+      category: MOCK_CATEGORIES.get(mockIssue.categoryId),
+      location: MOCK_LOCATIONS.get(issueId),
+      reporter: MOCK_USERS.get(mockIssue.reporterId),
+    },
+    statusCode: 200,
+  };
+}
+
+/**
+ * 11. Retrieve Assignment History for an Issue.
+ */
+export async function getIssueAssignments(
+  userId: string,
+  userRole: UserRole,
+  issueId: string,
+  db = prisma
+): Promise<ServiceResult<any>> {
+  if (!isValidUuid(issueId)) {
+    return { success: false, error: 'Invalid issue ID parameter.', statusCode: 400 };
+  }
+
+  // Authorize issue access
+  const authResult = await canAccessIssue(userId, userRole, issueId, db);
+  if (authResult.notFound) {
+    return { success: false, error: 'Issue not found.', statusCode: 404 };
+  }
+  if (!authResult.allowed) {
+    return { success: false, error: authResult.reason || 'Forbidden: Access to this issue is denied.', statusCode: 403 };
+  }
+
+  if (hasDbUrl()) {
+    try {
+      const assignments = await db.issueAssignment.findMany({
+        where: { issueId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          department: { select: { id: true, name: true, code: true } },
+          assignedUser: { select: { id: true, name: true, email: true } },
+          assignedBy: { select: { id: true, name: true, email: true } },
+        },
+      });
+      return { success: true, data: assignments, statusCode: 200 };
+    } catch {}
+  }
+
+  // In-Memory Fallback
+  const assignments = (MOCK_ASSIGNMENTS.get(issueId) || []).slice().reverse().map((a) => {
+    const assignedUser = a.assignedUserId ? MOCK_USERS.get(a.assignedUserId) : null;
+    const assignedBy = MOCK_USERS.get(a.assignedById);
+    return {
+      ...a,
+      department: a.departmentId ? { id: a.departmentId, name: 'Department' } : null,
+      assignedUser: assignedUser ? { id: assignedUser.id, name: assignedUser.name, email: assignedUser.email } : null,
+      assignedBy: assignedBy ? { id: assignedBy.id, name: assignedBy.name, email: assignedBy.email } : null,
+    };
+  });
+
+  return { success: true, data: assignments, statusCode: 200 };
+}
+
+/**
+ * 12. Retrieve Status History for an Issue.
+ */
+export async function getIssueStatusHistory(
+  userId: string,
+  userRole: UserRole,
+  issueId: string,
+  db = prisma
+): Promise<ServiceResult<any>> {
+  if (!isValidUuid(issueId)) {
+    return { success: false, error: 'Invalid issue ID parameter.', statusCode: 400 };
+  }
+
+  // Authorize issue access
+  const authResult = await canAccessIssue(userId, userRole, issueId, db);
+  if (authResult.notFound) {
+    return { success: false, error: 'Issue not found.', statusCode: 404 };
+  }
+  if (!authResult.allowed) {
+    return { success: false, error: authResult.reason || 'Forbidden: Access to this issue is denied.', statusCode: 403 };
+  }
+
+  if (hasDbUrl()) {
+    try {
+      const history = await db.issueStatusHistory.findMany({
+        where: { issueId },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          changedBy: { select: { id: true, name: true, role: true } },
+        },
+      });
+      return { success: true, data: history, statusCode: 200 };
+    } catch {}
+  }
+
+  // In-Memory Fallback
+  const list = MOCK_STATUS_HISTORIES.get(issueId) || [];
+  const history = list.map((h) => {
+    const user = MOCK_USERS.get(h.changedById);
+    return {
+      ...h,
+      changedBy: user ? { id: user.id, name: user.name, role: user.role } : null,
+    };
+  });
+
+  return { success: true, data: history, statusCode: 200 };
 }
