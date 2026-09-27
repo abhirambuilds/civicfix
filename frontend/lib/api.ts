@@ -13,6 +13,10 @@ import {
   IssueComment,
   IssueStatusHistory,
   IssueImage,
+  IssueAssignment,
+  IssueStatus,
+  IssuePriority,
+  DepartmentMemberSummary,
   User,
   OrganizationDashboardData,
   OrganizationDepartmentSummary,
@@ -308,6 +312,84 @@ export const issuesApi = {
       `/issues/${issueId}/images/${imageId}/url`
     );
   },
+
+  /**
+   * Update issue status according to backend state machine
+   */
+  async updateStatus(
+    issueId: string,
+    status: IssueStatus,
+    remark?: string
+  ): Promise<Issue> {
+    return fetchApi<Issue>(`/issues/${issueId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, remark }),
+    });
+  },
+
+  /**
+   * Assign or reassign issue to department and optional staff technician
+   */
+  async assign(
+    issueId: string,
+    departmentId: string,
+    userId?: string | null,
+    notes?: string | null
+  ): Promise<IssueAssignment> {
+    return fetchApi<IssueAssignment>(`/issues/${issueId}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({
+        departmentId,
+        userId: userId || undefined,
+        notes: notes || undefined,
+      }),
+    });
+  },
+
+  /**
+   * Update issue priority
+   */
+  async updatePriority(
+    issueId: string,
+    priority: IssuePriority,
+    remark?: string
+  ): Promise<Issue> {
+    return fetchApi<Issue>(`/issues/${issueId}/priority`, {
+      method: 'PATCH',
+      body: JSON.stringify({ priority, remark }),
+    });
+  },
+
+  /**
+   * Mark an issue as resolved with resolution details
+   */
+  async resolve(issueId: string, remark: string): Promise<Issue> {
+    return fetchApi<Issue>(`/issues/${issueId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ remark }),
+    });
+  },
+
+  /**
+   * Add an internal operational remark or public comment
+   */
+  async addRemark(
+    issueId: string,
+    commentText: string,
+    isInternal: boolean = true
+  ): Promise<IssueComment> {
+    return fetchApi<IssueComment>(`/issues/${issueId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ commentText, isInternal }),
+    });
+  },
+
+  /**
+   * Retrieve active and historical assignments for an issue
+   */
+  async getAssignments(issueId: string): Promise<IssueAssignment[]> {
+    return fetchApi<IssueAssignment[]>(`/issues/${issueId}/assignments`);
+  },
 };
 
 /**
@@ -341,6 +423,17 @@ export const organizationsApi = {
    */
   async getDepartments(): Promise<{ departments: OrganizationDepartmentSummary[] }> {
     return fetchApi<{ departments: OrganizationDepartmentSummary[] }>('/organizations/me/departments');
+  },
+
+  /**
+   * Retrieve active staff members for a specific department
+   */
+  async getDepartmentMembers(
+    departmentId: string
+  ): Promise<{ members: DepartmentMemberSummary[] }> {
+    return fetchApi<{ members: DepartmentMemberSummary[] }>(
+      `/organizations/me/departments/${departmentId}/members`
+    );
   },
 };
 

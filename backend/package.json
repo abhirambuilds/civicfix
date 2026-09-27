@@ -19,6 +19,7 @@
     "test:issue": "tsx src/scripts/testIssue.ts",
     "test:storage": "tsx src/scripts/testStorage.ts",
     "test:org-issues": "tsx src/scripts/testPrompt17.ts",
+    "test:workflow": "tsx src/scripts/testPrompt18.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

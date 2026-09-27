@@ -15,6 +15,7 @@ import {
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { ImagePreviewModal } from '@/components/issues/ImagePreviewModal';
+import { OrgIssueWorkflow } from '@/components/issues/OrgIssueWorkflow';
 import { LocationPicker } from '@/components/map/LocationPicker';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
@@ -34,7 +35,6 @@ import {
   IconUser,
   IconFileText,
   IconChevronRight,
-  IconLayers,
 } from '@/components/ui/Icons';
 
 function formatRoleLabel(role?: string): string {
@@ -89,10 +89,11 @@ export default function OrgIssueDetailsPage() {
       const issueData = await issuesApi.getById(issueId);
       setIssue(issueData);
 
-      const [imagesRes, commentsRes, historyRes] = await Promise.allSettled([
+      const [imagesRes, commentsRes, historyRes, assignmentsRes] = await Promise.allSettled([
         issuesApi.getImages(issueId),
         issuesApi.getComments(issueId),
         issuesApi.getStatusHistory(issueId),
+        issuesApi.getAssignments(issueId),
       ]);
 
       if (imagesRes.status === 'fulfilled') {
@@ -104,8 +105,11 @@ export default function OrgIssueDetailsPage() {
       if (historyRes.status === 'fulfilled') {
         setStatusHistory(historyRes.value || []);
       }
-
-      setAssignments(issueData.assignments || []);
+      if (assignmentsRes.status === 'fulfilled') {
+        setAssignments(assignmentsRes.value || []);
+      } else {
+        setAssignments(issueData.assignments || []);
+      }
       setError(null);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -134,12 +138,12 @@ export default function OrgIssueDetailsPage() {
 
         if (!isMounted) return;
         setIssue(issueData);
-        setAssignments(issueData.assignments || []);
 
-        const [imagesRes, commentsRes, historyRes] = await Promise.allSettled([
+        const [imagesRes, commentsRes, historyRes, assignmentsRes] = await Promise.allSettled([
           issuesApi.getImages(issueId),
           issuesApi.getComments(issueId),
           issuesApi.getStatusHistory(issueId),
+          issuesApi.getAssignments(issueId),
         ]);
 
         if (!isMounted) return;
@@ -160,6 +164,12 @@ export default function OrgIssueDetailsPage() {
           setStatusHistory(historyRes.value || issueData.statusHistory || []);
         } else {
           setStatusHistory(issueData.statusHistory || []);
+        }
+
+        if (assignmentsRes.status === 'fulfilled') {
+          setAssignments(assignmentsRes.value || []);
+        } else {
+          setAssignments(issueData.assignments || []);
         }
 
         setError(null);
@@ -601,70 +611,13 @@ export default function OrgIssueDetailsPage() {
 
         {/* Right Column (5 cols): Operational Action Area, Status History, Location Map */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Operational Action Area (Prompt 18 Placeholder/Roadmap) */}
-          <div className="p-6 rounded-2xl border border-indigo-900/60 bg-gradient-to-br from-slate-900 via-indigo-950/30 to-slate-900 shadow-md space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <IconLayers size={16} className="text-indigo-400" />
-                <span>Issue Actions</span>
-              </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-900/80 text-indigo-300 border border-indigo-700/60 uppercase tracking-wider">
-                Prompt 18 Roadmap
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Operational workflow controls will be available in the management controls
-              (Prompt 18). Staff will be able to perform live state mutations:
-            </p>
-
-            {/* Read-Only Capability Items (Non-functional placeholders so user understands layout) */}
-            <div className="space-y-2 text-xs">
-              <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-slate-300">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                  <span>Assign &amp; Reassign Department / Staff</span>
-                </span>
-                <span className="text-[10px] text-slate-400 italic">Prompt 18</span>
-              </div>
-
-              <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-slate-300">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                  <span>Update Issue Status (Review, Progress, Close)</span>
-                </span>
-                <span className="text-[10px] text-slate-400 italic">Prompt 18</span>
-              </div>
-
-              <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-slate-300">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                  <span>Set &amp; Escalate Priority Level</span>
-                </span>
-                <span className="text-[10px] text-slate-400 italic">Prompt 18</span>
-              </div>
-
-              <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-slate-300">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                  <span>Add Internal Technical Remarks</span>
-                </span>
-                <span className="text-[10px] text-slate-400 italic">Prompt 18</span>
-              </div>
-
-              <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-950/60 flex items-center justify-between text-slate-300">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span>Resolve Issue with Verification Notes</span>
-                </span>
-                <span className="text-[10px] text-slate-400 italic">Prompt 18</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl border border-dashed border-indigo-900/60 text-[11px] text-indigo-300/80">
-              Note: This interface establishes the operational foundation. Action handlers are reserved for implementation in Prompt 18.
-            </div>
-          </div>
+          {/* Operational Workflow Panel (Prompt 18) */}
+          <OrgIssueWorkflow
+            issue={issue}
+            assignments={assignments}
+            currentUser={user}
+            onWorkflowUpdated={handleManualRefresh}
+          />
 
           {/* Status History Audit Trail */}
           <div className="p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm space-y-4">

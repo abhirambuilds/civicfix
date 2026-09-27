@@ -16,6 +16,7 @@ import {
   getOrg,
   getOrgDashboard,
   getOrgDepartments,
+  getOrgDeptMembers,
   updateOrg,
   updateOrgStatus,
   listMembers,
@@ -61,7 +62,14 @@ organizationRouter.get(
   getOrgDepartments
 );
 
-// 2d. Organization Dashboard Summary by ID (Authorized Organization Member)
+// 2d. Organization Department Members (Derived from Authenticated User Context)
+organizationRouter.get(
+  '/me/departments/:departmentId/members',
+  requireAuth,
+  getOrgDeptMembers
+);
+
+// 2e. Organization Dashboard Summary by ID (Authorized Organization Member)
 organizationRouter.get(
   '/:organizationId/dashboard',
   requireAuth,

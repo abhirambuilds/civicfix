@@ -211,3 +211,18 @@ export interface OrganizationDashboardData {
   departments: OrganizationDepartmentSummary[];
 }
 
+export interface DepartmentMemberSummary {
+  id: string;
+  departmentId: string;
+  userId: string;
+  roleInDepartment: string;
+  isActive: boolean;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    isActive: boolean;
+  };
+}
+

@@ -12,6 +12,7 @@ import {
   removeOrganizationMember,
 } from '../services/organization.service.js';
 import { getOrganizationDashboardData } from '../services/issue.service.js';
+import { listDepartmentMembers } from '../services/department.service.js';
 import { sendSuccess, sendError } from '../utils/apiResponse.js';
 
 export async function getOrgDashboard(
@@ -82,6 +83,56 @@ export async function getOrgDepartments(
       'Departments retrieved successfully',
       200
     );
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getOrgDeptMembers(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user || !req.user.id) {
+      sendError(res, 'Authentication required.', 401);
+      return;
+    }
+
+    if (req.user.role === UserRole.USER) {
+      sendError(res, 'Forbidden: Public users cannot view department members.', 403);
+      return;
+    }
+
+    const requestedOrgId = (req.params.organizationId || req.query.organizationId) as string | undefined;
+    const dashboardResult = await getOrganizationDashboardData(
+      req.user.id,
+      req.user.role,
+      requestedOrgId
+    );
+
+    if (!dashboardResult.success || !dashboardResult.data) {
+      sendError(
+        res,
+        dashboardResult.error || 'Failed to retrieve organization context',
+        dashboardResult.statusCode || 403
+      );
+      return;
+    }
+
+    const result = await listDepartmentMembers(
+      req.user.id,
+      req.user.role,
+      dashboardResult.data.organization.id,
+      req.params.departmentId as string
+    );
+
+    if (!result.success) {
+      sendError(res, result.error || 'Failed to list department members', result.statusCode || 403);
+      return;
+    }
+
+    sendSuccess(res, result.data, 'Department members retrieved successfully', 200);
   } catch (error) {
     next(error);
   }

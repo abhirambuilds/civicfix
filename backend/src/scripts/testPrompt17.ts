@@ -27,8 +27,7 @@ async function runPrompt17Tests() {
   console.log('================================================================\n');
 
   // Seeded User IDs
-  const PLATFORM_ADMIN_ID = 'f0000000-0000-0000-0000-000000000001';
-  const ORG_OWNER_ID = 'f0000000-0000-0000-0000-000000000002';
+  // Seeded User IDs
   const ORG_ADMIN_ID = 'f0000000-0000-0000-0000-000000000003';
   const MANAGER_ID = 'f0000000-0000-0000-0000-000000000004'; // Civil Dept Manager
   const STAFF_ID = 'f0000000-0000-0000-0000-000000000005';   // Electrical Dept Staff
@@ -36,21 +35,17 @@ async function runPrompt17Tests() {
   const USER_2_ID = 'f0000000-0000-0000-0000-000000000007';  // Other Citizen
 
   // Seeded Organization IDs
-  const SRM_ORG_ID = 'a0000000-0000-0000-0000-000000000001';
   const UNRELATED_ORG_ID = 'a0000000-0000-0000-0000-000000000099';
 
   // Seeded Issue IDs
   const ELECTRICAL_ISSUE_ID = 'a1000000-0000-0000-0000-000000000001';
-  const CIVIL_ISSUE_ID = 'a1000000-0000-0000-0000-000000000002';
 
   // Generate tokens
-  const platformAdminToken = generateToken({ id: PLATFORM_ADMIN_ID, email: 'platform.admin@civicfix.demo', role: UserRole.PLATFORM_ADMIN });
-  const orgOwnerToken = generateToken({ id: ORG_OWNER_ID, email: 'srm.owner@civicfix.demo', role: UserRole.ORG_OWNER });
-  const orgAdminToken = generateToken({ id: ORG_ADMIN_ID, email: 'srm.admin@civicfix.demo', role: UserRole.ORG_ADMIN });
-  const managerToken = generateToken({ id: MANAGER_ID, email: 'manager@civicfix.demo', role: UserRole.MANAGER });
-  const staffToken = generateToken({ id: STAFF_ID, email: 'staff@civicfix.demo', role: UserRole.STAFF });
-  const user1Token = generateToken({ id: USER_1_ID, email: 'student@civicfix.demo', role: UserRole.USER });
-  const user2Token = generateToken({ id: USER_2_ID, email: 'user2@civicfix.demo', role: UserRole.USER });
+  const orgAdminToken = generateToken({ id: ORG_ADMIN_ID, role: UserRole.ORG_ADMIN });
+  const managerToken = generateToken({ id: MANAGER_ID, role: UserRole.MANAGER });
+  const staffToken = generateToken({ id: STAFF_ID, role: UserRole.STAFF });
+  const user1Token = generateToken({ id: USER_1_ID, role: UserRole.USER });
+  const user2Token = generateToken({ id: USER_2_ID, role: UserRole.USER });
 
   const server = http.createServer(app);
   await new Promise<void>((resolve) => server.listen(0, resolve));
@@ -79,7 +74,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(orgAdminDeptRes.status === 200, 'ORG_ADMIN retrieves organization departments (200)');
-    const orgAdminDeptData = await orgAdminDeptRes.json();
+    const orgAdminDeptData = (await orgAdminDeptRes.json()) as any;
     assert(Array.isArray(orgAdminDeptData.data.departments), 'Departments returned as array');
     assert(orgAdminDeptData.data.departments.length > 0, 'Departments contains active seeded departments');
 
@@ -104,7 +99,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(listRes.status === 200, 'ORG_ADMIN lists organization issues (200)');
-    const listData = await listRes.json();
+    const listData = (await listRes.json()) as any;
     assert(Array.isArray(listData.data.issues), 'Issues returned as array');
     assert(listData.data.issues.length > 0, 'Issues list contains real records');
     assert(Boolean(listData.data.pagination), 'Pagination metadata included');
@@ -121,7 +116,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(searchNumberRes.status === 200, 'Search by issue number returns 200 OK');
-    const searchNumberData = await searchNumberRes.json();
+    const searchNumberData = (await searchNumberRes.json()) as any;
     assert(
       searchNumberData.data.issues.some((i: any) => i.issueNumber === targetIssue.issueNumber),
       'Search by issue number matches exact issue'
@@ -132,7 +127,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(statusRes.status === 200, 'Filter by status returns 200 OK');
-    const statusData = await statusRes.json();
+    const statusData = (await statusRes.json()) as any;
     assert(
       statusData.data.issues.every((i: any) => i.status === 'REPORTED'),
       'All returned issues match requested status REPORTED'
@@ -143,7 +138,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(priorityRes.status === 200, 'Filter by priority returns 200 OK');
-    const priorityData = await priorityRes.json();
+    const priorityData = (await priorityRes.json()) as any;
     assert(
       priorityData.data.issues.every((i: any) => i.priority === 'CRITICAL'),
       'All returned issues match requested priority CRITICAL'
@@ -154,7 +149,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(pageRes.status === 200, 'Pagination page=1&limit=2 returns 200 OK');
-    const pageData = await pageRes.json();
+    const pageData = (await pageRes.json()) as any;
     assert(pageData.data.issues.length <= 2, 'Issues array constrained to requested limit (2)');
     assert(pageData.data.pagination.page === 1, 'Pagination page correctly reported as 1');
     assert(pageData.data.pagination.limit === 2, 'Pagination limit correctly reported as 2');
@@ -169,7 +164,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(issueDetailRes.status === 200, 'ORG_ADMIN retrieves issue details (200)');
-    const issueDetail = await issueDetailRes.json();
+    const issueDetail = (await issueDetailRes.json()) as any;
     assert(issueDetail.data.id === ELECTRICAL_ISSUE_ID, 'Retrieved correct issue ID');
     assert(Boolean(issueDetail.data.reporter), 'Reporter object present');
     assert(Boolean(issueDetail.data.reporter.name), 'Reporter name present');
@@ -195,7 +190,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(orgCommentsRes.status === 200, 'ORG_ADMIN fetches comments and remarks (200)');
-    const orgCommentsData = await orgCommentsRes.json();
+    const orgCommentsData = (await orgCommentsRes.json()) as any;
     assert(Array.isArray(orgCommentsData.data), 'Comments returned as array');
 
     // -------------------------------------------------------------
@@ -207,7 +202,7 @@ async function runPrompt17Tests() {
       headers: { Authorization: `Bearer ${orgAdminToken}` },
     });
     assert(historyRes.status === 200, 'ORG_ADMIN fetches status history (200)');
-    const historyData = await historyRes.json();
+    const historyData = (await historyRes.json()) as any;
     assert(Array.isArray(historyData.data), 'Status history returned as array');
 
   } finally {
